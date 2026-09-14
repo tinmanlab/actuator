@@ -61,7 +61,11 @@ const fs=require('fs');
   mark('safe stop insertion');await page.click('[data-case="tracking"]');
   await page.locator('#target').evaluate(e=>{e.value='.8';e.dispatchEvent(new Event('input',{bubbles:true}));});
   await page.waitForFunction(()=>labState.snapshot?.[0]>.8&&labState.snapshot[1]>.75&&labState.snapshot[29]===0);
-  await page.check('#contact');await page.waitForFunction(()=>!document.getElementById('notice').hidden);
+  ok(await page.evaluate(()=>!document.getElementById('contact').checked&&document.getElementById('notice').hidden),'occupied-stop test starts with the obstacle disabled and no stale notice');
+  // The application must reject this click. check() incorrectly requires the
+  // final checkbox to remain checked, racing the Worker's rejection reply.
+  await page.click('#contact');
+  await page.waitForFunction(()=>{const n=document.getElementById('notice');return !n.hidden&&n.textContent.startsWith('Stop not enabled:');});
   const rejectedAt=await page.evaluate(()=>labState.snapshot[0]);
   await page.waitForFunction(t=>labState.snapshot[0]>t+.1,rejectedAt);
   ok(await page.evaluate(()=>labState.snapshot[29]===0&&labState.snapshot[12]===0&&!document.getElementById('contact').checked&&document.getElementById('error').hidden),'occupied-stop insertion is rejected without stopping the engine');
