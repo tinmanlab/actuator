@@ -54,6 +54,10 @@ macOS passive viewing can require `mjpython examples/mujoco/run.py ... --live`. 
 | Existing results are rejected | Choose a new output folder. Evidence is not overwritten. |
 | Pages is stale | Reload without cache and compare the footer source commit with the latest Pages deployment. |
 
+## Native signal experiments
+
+Run `./build/qdd_signal_lab results/my-signals` after building. See the [experiment tutorial](tutorials/signals.md) for input changes, file columns and timing conventions. The [signal guide](https://tinmanlab.github.io/actuator/physics.html) owns equations, figures and fidelity limits.
+
 ## Data and interpretation
 
 CSV retains up to eight simulated seconds at 1 kHz. Positive load resists positive output rotation. Output torque is gearbox torque; q-axis current is not an output torque sensor. Temperatures and phase duties are simulated values, not board measurements. Use native CLI traces for switching behavior and parameter studies.

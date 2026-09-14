@@ -1,7 +1,7 @@
 name: Browser lab and Pages
 on:
   push:
-    branches: [main, feat/browser-lab, feat/contact-guides]
+    branches: [main, feat/browser-lab, feat/contact-guides, feat/signals-and-fidelity]
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,6 +39,7 @@ jobs:
       - name: Build actual WebAssembly and same-origin 3D assets
         run: |
           python tools/build_site.py
+          python tools/build_signal_data.py
           bash tools/build_wasm.sh
       - name: Record and validate actual MuJoCo experiments
         run: |
@@ -47,7 +48,7 @@ jobs:
       - name: Test real browser controls, WebAssembly, viewer, and videos
         run: |
           python -m http.server 8765 --directory _site > /tmp/site-server.log 2>&1 &
-          cd web && node smoke.cjs
+          cd web && node smoke.cjs && node signals-smoke.cjs
           cd ..
           cp results/browser/browser-lab.png _site/media/browser-lab.png
           cp results/browser/browser-acceptance.json _site/browser-acceptance.json
@@ -103,7 +104,7 @@ jobs:
           LAB_URL: ${{ needs.deploy.outputs.page_url }}
           EXPECTED_SHA: ${{ github.sha }}
           LAB_EVIDENCE: ../results/public-browser
-        run: cd web && node smoke.cjs
+        run: cd web && node smoke.cjs && node signals-smoke.cjs
       - name: Preserve deployed-site evidence
         if: always()
         uses: actions/upload-artifact@v4

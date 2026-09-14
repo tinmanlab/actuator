@@ -4,7 +4,7 @@
 
 `web/live.cpp` is a thin interactive scheduler around the existing `Plant`, `Inverter`, `DcLink`, `Sensors`, `Drive`, and `FastTrip` components. It is compiled both as a native test and as WebAssembly. There is no separate JavaScript implementation of FOC, electromechanics, or contact.
 
-The browser plant includes both mechanical inertias. It is **not** the external-MuJoCo mode. Its optional stop is the existing unilateral angular fixture (0.60 rad; stiffness 1200 N·m/rad, damping 4 N·m·s/rad). It has no free falling object or general 3D collision solver. Those are separately identified MuJoCo films and local examples.
+The browser plant includes both mechanical inertias. It is **not** the external-MuJoCo mode. Its optional stop is a two-sided, periodic compliant contact envelope derived from the link/tip/stop geometry, not a general rigid-body collision solver. See `docs/CONTACT_AND_GUIDES.md` for its non-insertion and reverse-contact contract; the native CLI still has a separate one-sided stop fixture. It has no free falling object or general 3D collision solver. Those are separately identified MuJoCo films and local examples.
 
 Timing: 50 μs controller/PWM period; ≤5 μs plant substeps, additionally split at protection and carrier-midpoint events; 1 kHz telemetry; the UI renders independently. The worker advances bounded blocks and never enlarges dt to meet wall-clock speed. Hidden tabs pause. No network requests send commands or data to hardware.
 
@@ -21,15 +21,18 @@ WASM runs in an ordinary Web Worker without threads or SharedArrayBuffer, so Git
 With Emscripten, Node.js and Python installed:
 
 ```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 npm install --prefix web
 python tools/build_site.py
+python tools/build_signal_data.py
 bash tools/build_wasm.sh
 # Generate public videos from actual accepted MuJoCo runs:
 python tools/verify_mujoco.py --backend osmesa --record --output results/site_mujoco
 python tools/site_media.py --evidence results/site_mujoco
 python -m http.server 8765 --directory _site
 # Another terminal:
-cd web && npx playwright install chromium && node smoke.cjs
+cd web && npx playwright install chromium && node smoke.cjs && node signals-smoke.cjs
 ```
 
 `tools/build_site.py` reuses the reviewed MJCF/OBJ recipe, exporting a compact scene representation for Three.js. Visual meshes never become a second source of mechanical mass. Camera controls and cutaway visibility do not change physics. No vendor CAD fidelity is implied.
@@ -61,3 +64,9 @@ and [Chrome's nested-source promise caveat](https://developer.chrome.com/blog/pl
 The browser-test dependency is pinned to Playwright 1.56.1 rather than the older
 version affected by the browser-installer TLS advisory. No credential or runtime
 permission is expanded by this dependency update.
+
+## Learning-page ownership
+
+README is the launch/value map, not another API manual. `control.html` owns the feedback pipeline and controller mathematics; `physics.html` owns signal traces, losses and the fidelity matrix; `api.html` owns interfaces and the compiled live example; `references.html` owns annotated external sources. `QUICKSTART.md` owns installation/troubleshooting and `tutorials/signals.md` owns experiment reproduction. Keep details in those owners and link rather than copying them.
+
+The Pages build runs `qdd_signal_lab` through `tools/build_signal_data.py`. Generated CSV/JSON/ZIP stay in `_site/data`, not the source tree. Failure to generate native data blocks publication. The static signal page is a trace explorer, not a second real-time physics engine.

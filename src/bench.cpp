@@ -120,7 +120,21 @@ BenchResult run_bench(BenchConfig c) {
  sensors.capture(plant.state,bus.voltage,inverter.fet_c,0,period);
  BenchResult result;
  if(c.scenario=="gate-fault"||c.scenario=="watchdog"||c.scenario=="sensor-fault"||c.scenario=="overvoltage")result.injection_time=0.08;
- std::ofstream csv,wave,protection_trace,diag;
+ std::ofstream csv,wave,protection_trace,diag,power;
+ if(!c.power_path.empty()) {
+  power.open(c.power_path);if(!power)throw std::runtime_error("cannot write power trace");
+  power<<"time_s,dc_W,ac_W,bridge_loss_W,copper_W,friction_W,gear_loss_W,load_W,stored_rate_W,energy_residual_W,vbus_V,output_speed_rad_s\n"<<std::setprecision(17);
+ }
+ auto losses=[&]() {
+  const auto& x=plant.state;const auto& m=c.plant.mechanical;
+  const double fm=m.rotor_viscous*x.rotor_speed+m.rotor_coulomb*std::tanh(x.rotor_speed/.1);
+  const double fo=m.output_viscous*x.output_speed+m.output_coulomb*std::tanh(x.output_speed/.01);
+  const double d=x.rotor_angle/m.ratio-x.output_angle;
+  const double z=std::copysign(std::max(0.0,std::abs(d)-m.backlash/2),d);
+  const double v=x.rotor_speed/m.ratio-x.output_speed;
+  return std::array<double,3>{1.5*plant.resistance()*(x.id*x.id+x.iq*x.iq),
+   fm*x.rotor_speed+fo*x.output_speed,(plant.gear_torque()-m.stiffness*z)*v};
+ };
  if(c.log_diagnostic&&!c.diagnostic_path.empty()) {
   diag.open(c.diagnostic_path);if(!diag)throw std::runtime_error("cannot write diagnostics");
   diag<<"boundary_s,true_id_A,true_iq_A,filter_a_A,filter_b_A,adc_a_A,adc_b_A,adc_c_A,current_sample_s,encoder_sample_s,pi_id_V,pi_iq_V,duty_a,duty_b,duty_c,vbus_V,state,fault\n"<<std::setprecision(17);
@@ -191,6 +205,7 @@ BenchResult run_bench(BenchConfig c) {
   if(out.gate_enable){++result.armed_ticks;if(out.voltage_saturated)++result.saturated_ticks;if(out.reference_limited)++result.reference_limited_ticks;}
   // Sample at carrier midpoint; computation occurs at next carrier boundary.
   double phase=0;bool captured=false;
+  const double energy0=power.is_open()?plant.energy():0;std::array<double,7> joules{};
   while(phase<period-1e-14) {
    const double event=inverter.next_event(phase);
    const double h=std::min({c.step,event-phase,period-phase,protection.next_event(t+phase)-(t+phase)});
@@ -201,7 +216,17 @@ BenchResult run_bench(BenchConfig c) {
    double applied_load=load;
    if(c.scenario=="contact"&&plant.state.output_angle>0.60)
     applied_load+=std::max(0.0,1200*(plant.state.output_angle-0.60)+4*plant.state.output_speed);
+   const auto losses0=power.is_open()?losses():std::array<double,3>{};
+   const double wo0=plant.state.output_speed;
    const auto stage=advance_bridge(plant,inverter,bus,phase+0.5*h,applied_load,h,interval_gate);
+   if(power.is_open()) {
+    const auto l1=losses();const auto& i=stage.power_current;
+    joules[0]+=h*stage.power_vbus*stage.bus_current;
+    joules[1]+=h*(stage.voltage.a*i.a+stage.voltage.b*i.b+stage.voltage.c*i.c);
+    joules[2]+=h*stage.loss;
+    for(int k=0;k<3;k++)joules[k+3]+=h*.5*(losses0[k]+l1[k]);
+    joules[6]+=h*applied_load*.5*(wo0+plant.state.output_speed);
+   }
    if(wave&&t+phase>=0.02&&t+phase<0.0202) {
     const auto current=plant.currents(); // endpoint currents; voltage/gates were held over the preceding interval
     wave<<t+phase+h<<','<<current.a<<','<<current.b<<','<<current.c<<','<<stage.voltage.a<<','<<stage.voltage.b<<','<<stage.voltage.c;
@@ -224,6 +249,12 @@ BenchResult run_bench(BenchConfig c) {
    if(!captured&&phase>=period/2-1e-14) {
     sensors.capture(plant.state,bus.voltage,inverter.fet_c,t+phase,period);captured=true;
    }
+  }
+  if(power.is_open()) {
+   const double stored=plant.energy()-energy0;
+   const double residual=joules[1]-joules[3]-joules[4]-joules[5]-joules[6]-stored;
+   power<<t+period;for(double j:joules)power<<','<<j/period;
+   power<<','<<stored/period<<','<<residual/period<<','<<bus.voltage<<','<<plant.state.output_speed<<'\n';
   }
   if(t>=0.02&&out.gate_enable) {double e=plant.state.iq-out.reference.q;err2+=e*e;++samples;}
   if(c.log_csv&&tick%std::uint64_t(c.trace_divider)==0) {
