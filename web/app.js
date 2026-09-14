@@ -48,7 +48,7 @@ worker.onmessage=({data:d})=>{
  if(d.type==='error'){report(d.message);setRunning(false);return;}
  if(d.type==='ready'){
   ui.ready=true;for(const id of ['run','reset','step','push','fault','export'])$(id).disabled=false;
-  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';reset();const preset=new URLSearchParams(location.search).get('experiment');if(['tracking','disturbance','contact','reverse','fault'].includes(preset))choose(preset);return;
+  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';reset();const query=new URLSearchParams(location.search),preset=query.get('experiment');if(['tracking','disturbance','contact','reverse','fault'].includes(preset))choose(preset);else if(query.get('paused')!=='1'&&!document.hidden)setRunning(true);return;
  }
  if(d.type==='running'){ui.running=d.value;if(ui.snapshot)update(ui.snapshot);return;}
  if(d.type==='reset')ui.rows=[];
@@ -149,7 +149,7 @@ async function setupScene(){
 }
 setupScene().catch(e=>report('3D viewer: '+e.message));
 const filmData=[['tracking','Position tracking','A target change drives current, torque, and link motion.'],['disturbance','External disturbance','The controller reacts to an applied load.'],['contact','Stopper contact','The moving tip pushes against a physical stop.'],['impact','Falling-object impact','A free body hits the driven link.'],['fault','Driver fault','Drive is removed while mechanical dynamics continue.']];
-$('films').innerHTML=filmData.map(([id,title,text])=>`<article class="film" id="film-${id}"><video controls playsinline preload="metadata" poster="media/${id}.jpg" aria-label="Actual MuJoCo: ${title}"><source src="media/${id}.webm" type='video/webm; codecs="vp9"'><source src="media/${id}.mp4" type="video/mp4"><a href="media/${id}.mp4">Play ${title}</a></video><div class="film-info"><h3>${title}</h3><p>${text}</p><p class="video-status" role="status">Recorded experiment · press Play</p><a href="media/${id}.mp4">Open MP4 ↗</a> · <a href="media/${id}.webm">Open WebM ↗</a></div></article>`).join('');
+$('films').innerHTML=filmData.map(([id,title,text])=>`<article class="film" id="film-${id}"><video controls muted loop playsinline preload="metadata" poster="media/${id}.jpg" aria-label="Actual MuJoCo: ${title}"><source src="media/${id}.webm" type='video/webm; codecs="vp9"'><source src="media/${id}.mp4" type="video/mp4"><a href="media/${id}.mp4">Play ${title}</a></video><div class="film-info"><h3>${title}</h3><p>${text}</p><p class="video-status" role="status">Event excerpt · loops from the start; press Play</p><a href="media/${id}.mp4">Event MP4 ↗</a> · <a href="media/full/${id}.mp4">Full recording ↗</a> · <a href="media/${id}.webm">Open WebM ↗</a></div></article>`).join('');
 // A rejected nested <source> need not reject play(). Expose source errors too.
 for (const film of document.querySelectorAll('.film')) {
  const video=film.querySelector('video'),status=film.querySelector('.video-status');
@@ -157,7 +157,7 @@ for (const film of document.querySelectorAll('.film')) {
  const failedPlayback=()=>{status.textContent='This browser could not play the recording. Try the MP4 or WebM link below.';};
  for(const source of sources)source.addEventListener('error',()=>{failed.add(source);if(failed.size===sources.length)failedPlayback();});
  video.addEventListener('error',failedPlayback);
- video.addEventListener('playing',()=>{status.textContent='Playing actual MuJoCo recording · not live browser physics';});
+ video.addEventListener('playing',()=>{status.textContent='Looping actual MuJoCo event · restart is a replay, not physical reversal';});
  video.addEventListener('pause',()=>{if(!video.error)status.textContent='Recording paused · press Play to continue';});
 }
 fetch('build.json').then(r=>r.json()).then(b=>{$('version').textContent=`Source ${b.source_commit.slice(0,12)} · local C++/WASM · 1 kHz telemetry`;$('version').dataset.sha=b.source_commit;}).catch(()=>{$('version').textContent='Build metadata unavailable';});

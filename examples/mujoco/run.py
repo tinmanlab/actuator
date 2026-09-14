@@ -141,7 +141,7 @@ def main():
                 drive_work_J=float(work_drive),disturbance_work_J=float(work_disturbance),
                 energy_residual_includes_passive_and_contact_losses_J=float(sum(data.energy)-initial_energy-work_drive-work_disturbance),
                 mjcf_sha256=sha(xml),mesh_sha256={m.name:sha(m) for m in sorted(xml.with_name('assets').glob('*.obj'))},
-                library_sha256=sha(drive.path),physics_trace_sha256=sha(trace),video_frames=frames,
+                library_sha256=sha(drive.path),physics_trace_sha256=sha(trace),video_frames=frames,playback_speed=a.playback_speed,
                 hardware_validation='NOT_RUN',coupling='explicit 50 us ZOH torques; mechanics substeps do not refine coupling',
                 electrical_equations='native C++',rendered_geometry='illustrative; collider proxies and inertial sources preserved')
             report.update(evaluate(report))

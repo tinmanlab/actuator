@@ -10,9 +10,11 @@
 [![Browser lab and Pages](https://github.com/tinmanlab/actuator/actions/workflows/pages.yml/badge.svg)](https://github.com/tinmanlab/actuator/actions/workflows/pages.yml)
 [![Native and MuJoCo verification](https://github.com/tinmanlab/actuator/actions/workflows/verify.yml/badge.svg)](https://github.com/tinmanlab/actuator/actions/workflows/verify.yml)
 
-[![Interactive motor bench with 3D assembly, controls and current/torque traces](https://tinmanlab.github.io/actuator/media/browser-lab.png)](https://tinmanlab.github.io/actuator/)
+[![Short sequential tour of actual MuJoCo tracking, loads, contact, impact and driver trip](https://tinmanlab.github.io/actuator/media/feature-tour.gif)](https://tinmanlab.github.io/actuator/)
 
-**No installation, login or API key. The live simulation runs locally in your browser.**
+**No installation, login or API key. The live joint starts automatically; pause whenever needed.**
+
+*GIF: short event excerpts from actual C++–MuJoCo recordings. Restarting the loop replays the event.*
 
 </div>
 
@@ -24,14 +26,15 @@ Change a target, push the output, meet a stop or trip the driver. Inspect curren
 
 ## Start in 30 seconds
 
-1. [Open the lab](https://tinmanlab.github.io/actuator/) and press **Start simulation**. Move **Target angle**.
+1. [Open the lab](https://tinmanlab.github.io/actuator/) and move **Target angle**.
 2. Press **Push +4 N·m / 120 ms**. Watch current rise and the link recover. Try **Meet a stop**, then **Trip driver**.
-3. Open [Signals & losses](https://tinmanlab.github.io/actuator/physics.html). Inspect actual native gate edges, current decay, heating and signed power—not just the final pose.
+3. Recalculate [Powertrain](https://tinmanlab.github.io/actuator/electronics.html) for switched FOC, heat and torque–RPM maps. Open [Signals & losses](https://tinmanlab.github.io/actuator/physics.html). Inspect actual native gate edges, current decay, heating and signed power—not just the final pose.
 
 ## Choose your depth
 
 | Your question | One place to answer it |
 |---|---|
+| Can I change switching, noise, heat and motor-map conditions? | [Recalculating C++/WASM Powertrain experiments](https://tinmanlab.github.io/actuator/electronics.html) |
 | How does FOC work inside the loop? | [Interactive control pipeline and coordinate calculator](https://tinmanlab.github.io/actuator/control.html) |
 | What do the six gates do? Why does current continue after shutdown? | [Native PWM, diode and current traces](https://tinmanlab.github.io/actuator/physics.html#pwm) |
 | Where do heat, friction and efficiency enter? | [Reproducible thermal and power experiments](https://tinmanlab.github.io/actuator/physics.html#thermal) |
@@ -55,7 +58,7 @@ Use a **new output directory**. [Quickstart](docs/QUICKSTART.md) owns installati
 
 The sinusoidal PMSM model includes R/L/back-EMF, current sensing and latency, two-inertia gearing, compliance/backlash, smooth friction, copper heating, R(T), DC-link regeneration and fault latches. Native switched experiments add gate events, dead time, conduction and diode paths.
 
-**Browser:** averaged inverter + 1-axis mechanics/compliant stop. **MuJoCo:** separate actual 3D mechanics/contact runs. **Not established:** a calibrated motor, manufactured PCB, STM32 worst-case execution time or hardware safety. Iron loss, switching-energy loss, magnetic saturation and winding hot spots are omitted; the displayed efficiency is a bounded synthetic calculation, not a product rating.
+**Live joint:** averaged inverter + 1-axis mechanics/compliant stop. **Powertrain:** switched electrical scope, prescribed-current heat, and averaged-inverter motor maps. **MuJoCo:** separate actual 3D mechanics/contact runs. **Not established:** a calibrated motor, manufactured PCB, STM32 worst-case execution time or hardware safety. Iron loss, switching-energy loss, magnetic saturation and winding hot spots are omitted; the displayed efficiency is a bounded synthetic calculation, not a product rating.
 
 ## Repository map
 
