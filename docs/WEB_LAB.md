@@ -32,7 +32,9 @@ python tools/verify_mujoco.py --backend osmesa --record --output results/site_mu
 python tools/site_media.py --evidence results/site_mujoco
 python -m http.server 8765 --directory _site
 # Another terminal:
-cd web && npx playwright install chromium && node smoke.cjs && node signals-smoke.cjs
+cd web && npx playwright install chromium
+LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs
+node signals-smoke.cjs && node powertrain-smoke.cjs
 ```
 
 `tools/build_site.py` reuses the reviewed MJCF/OBJ recipe, exporting a compact scene representation for Three.js. Visual meshes never become a second source of mechanical mass. Camera controls and cutaway visibility do not change physics. No vendor CAD fidelity is implied.
@@ -70,3 +72,21 @@ permission is expanded by this dependency update.
 README is the launch/value map, not another API manual. `control.html` owns the feedback pipeline and controller mathematics; `physics.html` owns signal traces, losses and the fidelity matrix; `api.html` owns interfaces and the compiled live example; `references.html` owns annotated external sources. `QUICKSTART.md` owns installation/troubleshooting and `tutorials/signals.md` owns experiment reproduction. Keep details in those owners and link rather than copying them.
 
 The Pages build runs `qdd_signal_lab` through `tools/build_signal_data.py`. Generated CSV/JSON/ZIP stay in `_site/data`, not the source tree. Failure to generate native data blocks publication. The static signal page is a trace explorer, not a second real-time physics engine.
+
+
+## Interactive powertrain and event media
+
+`electronics.html` runs `web/experiments.cpp` in a separate Worker. The same host
+API is compiled by CMake and Emscripten; it does not use an alternate JS plant.
+The shared form recalculates switching, prescribed-current heat or a 28-point
+motor-shaft map. See [the numerical/API contract](POWERTRAIN.md).
+
+The joint autostarts when visible; use `?paused=1` for a paused entry. Reset and
+algorithm changes still pause. Media selection uses native trace event times and
+the renderer's explicit `playback_speed`; full MP4s are preserved in `media/full/`.
+The generated `media/feature-tour.gif` concatenates all five event excerpts and
+replaces the README still image. A loop restart replays an event, not reverse physics.
+
+The Pages job additionally runs `web/powertrain-smoke.cjs` before deployment and
+against the public URL. It checks autostart, recomputation, stale-result labeling,
+torque/efficiency qualification, temperature changes, event loops and the GIF.

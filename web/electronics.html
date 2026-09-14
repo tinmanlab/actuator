@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Powertrain — calculate the current, switching, heat and motor map</title>
+<meta name="description" content="Recalculate native C++ FOC, six-switch inverter, current sensing, thermal response and qualified motor-shaft torque–RPM efficiency points in your browser.">
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="guide.css"><link rel="stylesheet" href="physics.css"><link rel="stylesheet" href="electronics.css"></head>
+<body><a class="skip" href="#experiment">Skip to experiment</a>
+<header><a class="brand" href="index.html"><span class="brand-icon">a</span>actuator</a><nav aria-label="Main"><a href="index.html">Live joint</a><a href="electronics.html" aria-current="page">Powertrain</a><a href="control.html">Control</a><a href="physics.html">Signals &amp; losses</a><a href="api.html">Code &amp; API</a><a href="references.html">References</a></nav></header>
+<main class="guide-main">
+<section class="guide-hero"><div class="eyebrow">CALCULATE / INSPECT / COMPARE</div><h1>From a command to real currents.</h1><p>Change a setting and recalculate the existing C++ model. Trace FOC through the six-switch bridge, explore heating, or build a motor-shaft torque–RPM map.</p><p class="model-note">Synthetic SIL, not a calibrated motor. These isolated experiments do not control the live joint. Switching replay is inspection of a completed calculation.</p></section>
+<section id="experiment">
+<div class="step-controls" aria-label="Experiment type"><button data-kind="0" aria-pressed="true">01 Electrical scope</button><button data-kind="1" aria-pressed="false">02 Heat</button><button data-kind="2" aria-pressed="false">03 Torque–RPM map</button></div>
+<div id="exp-status" class="note" role="status" aria-live="polite">Loading C++ WebAssembly…</div><div id="exp-error" class="note warning" role="alert" hidden></div>
+<div class="experiment-grid">
+<form id="parameters" class="experiment-settings">
+<h2>Experiment settings</h2>
+<label>q-axis current [A]<input id="iq" type="number" min="-15" max="15" step=".5" value="4"></label>
+<label>Motor shaft speed [RPM]<input id="rpm" type="number" min="-4000" max="4000" step="100" value="600"></label>
+<label>ADC capture noise σ [A]<input id="noise" type="number" min="0" max=".5" step=".005" value=".015"></label>
+<label>Analog bandwidth [Hz]<input id="bandwidth" type="number" min="1000" max="40000" step="1000" value="10000"></label>
+<label>Dead time [ns]<input id="deadtime" type="number" min="0" max="450" step="50" value="150"></label>
+<label>Ambient [°C]<input id="ambient" type="number" min="0" max="60" step="5" value="25"></label>
+<label>Rotor viscous drag [N·m·s]<input id="friction" type="number" min="0" max=".003" step=".0001" value=".0002"></label>
+<button id="calculate" class="primary" disabled>Calculate experiment</button><button id="export-exp" type="button" disabled>Export result CSV</button>
+<p id="fixture-note" class="model-note">120 ms switched current loop, 20 kHz PWM. An ideal dynamometer imposes speed; this is not free acceleration.</p>
+</form>
+<div class="experiment-results">
+<div id="electrical-panel">
+<h2>One signal chain, one selected instant</h2><p class="model-note">The loop produces three phase voltages using six switches. 3PWM/6PWM describe driver inputs, <strong>not three versus six motor phases</strong>.</p>
+<div class="flow-chain" aria-label="Computed electrical pipeline">
+<div><b>01 · Current command</b><output id="flow-command">—</output><small>Id* = 0; Iq* in A</small></div>
+<div><b>02 · Clarke / Park</b><output id="flow-feedback">—</output><small>Offset-corrected ADC; sample-angle aligned</small></div>
+<div><b>03 · PI + feed-forward</b><output id="flow-voltage">—</output><small>Voltage-limited Vd / Vq [V]</small></div>
+<div><b>04 · Inverse Park</b><output id="flow-ab">—</output><small>Vα / Vβ [V]</small></div>
+<div><b>05 · SVPWM</b><output id="flow-duty">—</output><small>A / B / C duty, centered common mode</small></div>
+<div><b>06 · Six-switch bridge</b><output id="flow-bridge">—</output><small>DC bus; logical gates shown below</small></div>
+<div><b>07 · PMSM</b><output id="flow-current">—</output><small>True ia / ib / ic [A]</small></div>
+<div><b>08 · Sensor → feedback</b><output id="flow-sensor">—</output><small>Analog ia → held raw ADC ia [A]</small></div>
+</div>
+<div class="bridge" aria-label="Three-phase six-switch inverter"><div class="bus-rail">DC+ bus</div><div class="bridge-legs">
+<div><span id="gate-0" class="switch">AH</span><output id="pole-a">A</output><span id="gate-1" class="switch">AL</span></div>
+<div><span id="gate-2" class="switch">BH</span><output id="pole-b">B</output><span id="gate-3" class="switch">BL</span></div>
+<div><span id="gate-4" class="switch">CH</span><output id="pole-c">C</output><span id="gate-5" class="switch">CL</span></div></div><div class="bus-rail">DC− bus · OFF switch does not imply zero diode current</div></div>
+<div class="figure-controls"><label>Inspect last 2 ms <input type="range" id="sample" min="0" max="1" value="0" aria-label="Switching sample"></label><button id="replay" type="button">Replay captured samples</button></div><output id="sample-readout" class="signal-readout">No calculated samples yet.</output>
+<figure class="signal-figure"><h3>Command, true current and observed current</h3><svg id="current-chart" class="signal-plot" role="img" aria-label="Current response"></svg><div id="current-chart-legend" class="signal-legend"></div><figcaption>20 kHz control samples. True current and the held, delayed sensor observation are not simultaneous measurements.</figcaption></figure>
+<figure class="signal-figure"><h3>Inside one switching period</h3><div class="figure-controls"><label>Phase <select id="phase"><option>A</option><option>B</option><option>C</option></select></label><label>Signal <select id="wave"><option value="gates">High / low gates + carrier</option><option value="voltage">Phase / line voltage</option><option value="current">Phase current</option><option value="sensing">True / analog / held ADC ia</option></select></label><label><input type="checkbox" id="zoom">Zoom into dead time</label></div><svg id="switch-chart" class="signal-plot" role="img" aria-label="Switching signals"></svg><div id="switch-chart-legend" class="signal-legend"></div><figcaption>Bridge samples are constitutive evaluations at substep midpoints (or implicit diode endpoints), not nanosecond current measurements. Gate bits are ON/OFF logic, not Vgs waveforms.</figcaption></figure>
+<p class="note"><strong>Where smoothing happens:</strong> winding inductance shapes physical current. The sensor has an analog low-pass filter; this implementation then adds capture noise and ADC quantization. A DAC may set a comparator threshold; it does not smooth the motor power current. Lower analog bandwidth does not remove noise added after that filter.</p>
+</div>
+<div id="thermal-panel" hidden><h2>Heat accumulates over physical seconds</h2><p>Prescribed current for 600 s, not an inverter-controlled heating run. The same winding/case thermal equations and R(T) are recalculated. FET heat is a conduction proxy; protection is bypassed in this diagnostic.</p><figure class="signal-figure"><svg id="heat-chart" class="signal-plot" role="img" aria-label="Temperature versus time"></svg><div id="heat-chart-legend" class="signal-legend"></div></figure><output id="heat-result" class="note"></output><p><a href="physics.html#thermal">Compare with the separately labeled preheated derating experiment →</a></p></div>
+<div id="map-panel" hidden><h2>Torque–RPM and qualified efficiency</h2><p>28 independent, cold-start averaged-inverter runs: 2 / 5 / 10 / 15 A at 0–3600 motor RPM. No gearbox. Last 20 ms of each 120 ms run supply time-weighted means.</p><figure class="signal-figure"><h3>Motor-shaft torque</h3><svg id="torque-chart" class="signal-plot" role="img" aria-label="Torque versus motor RPM"></svg><div id="torque-chart-legend" class="signal-legend"></div></figure><figure class="signal-figure"><h3>DC-terminal → motor-shaft efficiency</h3><svg id="efficiency-chart" class="signal-plot" role="img" aria-label="Qualified efficiency versus motor RPM"></svg><div id="efficiency-chart-legend" class="signal-legend"></div></figure><p id="map-result" class="note"></p><p>Gaps mean unqualified, not zero efficiency. A point needs positive input/output power, current tracking, no fault, low stored-energy rate and 0 &lt; η ≤ 1. Voltage saturation, copper/inverter/friction losses and numerical residual are retained in CSV. Omitted iron, switching-energy and auxiliary losses make this <strong>unsuitable as a product rating or continuous-torque map</strong>.</p><details><summary>Inspect each calculated operating point</summary><div class="table-wrap"><table><thead><tr><th>RPM</th><th>Iq* [A]</th><th>Shaft [N·m]</th><th>DC [W]</th><th>η [%]</th><th>Saturation [%]</th><th>Fault</th></tr></thead><tbody id="map-rows"></tbody></table></div></details></div>
+<output id="exp-summary" class="signal-readout"></output>
+</div></div></section>
+<section class="guide-footer"><h2>Reproduce, then extend</h2><p><a data-source="docs/POWERTRAIN.md" href="https://github.com/tinmanlab/actuator/blob/main/docs/POWERTRAIN.md">Experiment API, units and numerical contract</a> · <a data-source="examples/electronics_api.cpp" href="https://github.com/tinmanlab/actuator/blob/main/examples/electronics_api.cpp">Compiled C++ example</a> · <a data-source="web/experiments.cpp" href="https://github.com/tinmanlab/actuator/blob/main/web/experiments.cpp">Model runner</a></p><p><a href="control.html">FOC equations</a> · <a href="references.html">Primary references</a> · <a href="https://docs.simplefoc.com/drivers_config">SimpleFOC 3PWM/6PWM</a> · <a href="https://docs.simplefoc.com/inline_current_sense">ADC sensing</a> · <a href="https://github.com/Sab1e-dev/OpenFOC/tree/ef3272f90c7662809fff153e9be73bc458a36968">OpenFOC pinned implementation</a> · <a href="physics.html#fidelity">Fidelity limits</a>. No low-side shunt reconstruction, magnetic saturation, EMI, gate charge or hardware acceptance is implied.</p><span id="guide-version">Reading build manifest…</span></section>
+</main><script src="guide.js"></script><script src="electronics.js"></script></body></html>
