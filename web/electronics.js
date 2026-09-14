@@ -102,8 +102,8 @@
   if(state.kind===0)electrical();
   if(state.kind===1){const r=state.tables[2];chart('heat-chart',[trace(r,1,'Winding',0,1),trace(r,2,'Case',0,1),trace(r,3,'FET proxy',0,1)],'Time [s]','Temperature [°C]');const last=r.at(-1);$('heat-result').textContent=`At 600 s: winding ${fmt(last[1],2)} °C, case ${fmt(last[2],2)} °C, per-phase resistance ${fmt(last[4]*1000,2)} mΩ. Prescribed current; not a protected drive.`;}
   if(state.kind===2){const r=state.tables[3];const currents=[2,5,10,15];
-   chart('torque-chart',currents.map(a=>({name:`Iq* ${a} A`,dots:true,points:r.filter(x=>x[1]===a).map(x=>[x[0],x[2]])})),'Motor speed [RPM]','Shaft torque [N·m]');
-   chart('efficiency-chart',currents.map(a=>({name:`Iq* ${a} A`,dots:true,points:r.filter(x=>x[1]===a).map(x=>[x[0],x[6]?100*x[5]:NaN])})),'Motor speed [RPM]','Qualified η [%]');
+   chart('torque-chart',currents.map(a=>({name:`Iq* ${a} A`,dots:true,points:r.filter(x=>x[1]===a).map(x=>[x[0],x[2]])})),'Motor speed [RPM]','Shaft torque [N·m]',[0,3600]);
+   chart('efficiency-chart',currents.map(a=>({name:`Iq* ${a} A`,dots:true,points:r.filter(x=>x[1]===a).map(x=>[x[0],x[6]?100*x[5]:NaN])})),'Motor speed [RPM]','Qualified η [%]',[0,3600]);
    $('map-result').textContent=`${r.filter(x=>x[6]).length} / ${r.length} points qualify. Motor shaft only; cold-start synthetic map, not continuous rating.`;
    $('map-rows').innerHTML=r.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${fmt(x[2])}</td><td>${fmt(x[3],2)}</td><td>${x[6]?fmt(100*x[5],1):'—'}</td><td>${fmt(x[9]*100,1)}</td><td>${x[10]}</td></tr>`).join('');
   }

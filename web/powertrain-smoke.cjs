@@ -10,6 +10,7 @@ const fs=require('fs');
  const watchdog=setTimeout(()=>{checks.push({name:'timeout at '+stage,pass:false});save();process.exit(1);},240000);
  const browser=await chromium.launch({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ const capture=async name=>{await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo({top:0,behavior:'instant'});});await page.waitForFunction(()=>window.scrollY===0);await page.screenshot({path:out+'/'+name,fullPage:true});};
  page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&!r.url().endsWith('favicon.ico'))requests.push(r.status()+' '+r.url());});
  try{
   stage='automatic entry';await page.goto(base,{waitUntil:'networkidle'});
@@ -38,7 +39,7 @@ const fs=require('fs');
   const before=await page.locator('#sample-readout').textContent();await page.locator('#sample').evaluate(e=>{e.value='80';e.dispatchEvent(new Event('input',{bubbles:true}));});
   ok(before!==await page.locator('#sample-readout').textContent(),'inspection slider follows computed switching samples');
   await page.selectOption('#wave','voltage');await page.check('#zoom');ok(await page.locator('#switch-chart path').count()>=2,'phase/line and dead-time plot is populated');
-  await page.screenshot({path:out+'/powertrain-electrical.png',fullPage:true});
+  await capture('powertrain-electrical.png');
   const first=await page.evaluate(()=>powertrainState.tables[0].at(-1)[4]);
   await page.fill('#iq','6');ok(await page.locator('#exp-status').evaluate(e=>e.classList.contains('stale')),'editing an input marks old results stale');
   const count=await page.evaluate(()=>powertrainState.completed);await page.click('#calculate');
@@ -47,14 +48,16 @@ const fs=require('fs');
   stage='thermal';await page.click('[data-kind="1"]');await page.click('#calculate');
   await page.waitForFunction(()=>powertrainState.tables?.[2]?.length===601&&!powertrainState.busy,null,{timeout:60000});
   ok(await page.evaluate(()=>powertrainState.tables[2].at(-1)[1]>powertrainState.tables[2][0][1]),'native prescribed-current thermal simulation heats up');
-  await page.screenshot({path:out+'/powertrain-thermal.png',fullPage:true});
+  await capture('powertrain-thermal.png');
   stage='motor map';await page.click('[data-kind="2"]');await page.click('#calculate');
   await page.waitForFunction(()=>powertrainState.tables?.[3]?.length===28&&!powertrainState.busy,null,{timeout:90000});
   ok(await page.evaluate(()=>powertrainState.tables[3].some(r=>r[6])&&powertrainState.tables[3].filter(r=>r[0]===0).every(r=>r[5]===-1)),'torque/RPM map keeps qualified points and missing stall efficiencies');
   ok(await page.locator('#torque-chart path').count()===4&&await page.locator('#efficiency-chart path').count()===4,'four current levels have torque and efficiency traces');
+  const domains=await Promise.all(['torque-chart','efficiency-chart'].map(id=>page.locator('#'+id+' text').allTextContents()));
+  ok(domains.every(values=>values.includes('0')&&values.includes('3600')),'torque and efficiency retain identical RPM domains including unqualified regions');
   const downloadPromise=page.waitForEvent('download');await page.click('#export-exp');const download=await downloadPromise;await download.saveAs(out+'/motor-map.csv');
   const csv=fs.readFileSync(out+'/motor-map.csv','utf8');ok(csv.includes('numerical_residual_W')&&csv.trim().split('\n').length===29,'CSV includes 28 computed points and power residuals');
-  await page.screenshot({path:out+'/powertrain-map.png',fullPage:true});
+  await capture('powertrain-map.png');
   for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});await page.waitForTimeout(250);ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'powertrain layout at '+width+' px');}
   if(process.env.EXPECTED_SHA){const d=await(await page.request.get(new URL('build.json',base).href)).json();ok(d.source_commit===process.env.EXPECTED_SHA,'public build matches merged commit');}
   ok(!errors.length&&!requests.length,'no script exceptions or missing assets');stage='complete';
