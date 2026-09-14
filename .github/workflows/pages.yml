@@ -1,7 +1,7 @@
 name: Browser lab and Pages
 on:
   push:
-    branches: [main, feat/browser-lab]
+    branches: [main, feat/browser-lab, feat/contact-guides]
   workflow_dispatch:
 permissions:
   contents: read

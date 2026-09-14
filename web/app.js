@@ -4,20 +4,20 @@ const $=id=>document.getElementById(id), ui={ready:false,running:false,scenario:
 window.labState=ui;
 const states=['Disabled','Calibrating','Ready','Armed','Fault'];
 const worker=new Worker('worker.js');let chart='position',renderer,camera,orbit,world,rotor,output,closed=false;
-const originalMaterials=new Map(),stopParts=[];const axes=new THREE.Vector3(0,1,0);
+const originalMaterials=new Map(),stopParts=[],proxyParts=[];const axes=new THREE.Vector3(0,1,0);
 function report(message){ui.errors.push(message);$('error').hidden=false;$('error').textContent=message+' Reload the page to retry. For file:// use the hosted site or a local HTTP server.';$('engine-status').textContent='Engine unavailable';$('engine-status').className='status fault';}
 worker.onerror=e=>report(e.message||'Worker failed to load');
 function send(d){if(ui.ready)worker.postMessage(d);}
 function values(){return {mode:+$('mode').value,position:+$('target').value,kp:+$('kp').value,kd:+$('kd').value,load:+$('load').value,velocity:+$('velocity').value,torque:+$('torque').value,current:+$('current').value};}
 function setRunning(v){if(!ui.ready)return;worker.postMessage({type:'run',value:v});ui.running=v;$('run').textContent=v?'Pause simulation':'Start simulation';$('step').disabled=v;}
 function reset(start=false){
- if(!ui.ready)return;ui.rows=[];ui.snapshot=null;setRunning(false);
+ if(!ui.ready)return;ui.rows=[];ui.snapshot=null;$('notice').hidden=true;setRunning(false);
  worker.postMessage({type:'reset',scenario:ui.scenario,algorithm:+$('algorithm').value,values:values()});
  worker.postMessage({type:'set',key:5,value:$('contact').checked?1:0});
  if(start)setRunning(true);
 }
 function choose(name){
- ui.scenario=name;$('mode').value='4';$('target').value=name==='contact'?'.85':'.4';$('load').value='0';$('kp').value='30';$('kd').value='1.8';for(const id of ['velocity','torque','current'])$(id).value='0';$('contact').checked=name==='contact';
+ ui.scenario=name;$('mode').value=name==='reverse'?'2':'4';$('target').value=name==='contact'?'.85':'.4';$('load').value='0';$('kp').value='30';$('kd').value='1.8';for(const id of ['velocity','torque','current'])$(id).value='0';$('contact').checked=['contact','reverse'].includes(name);if(name==='reverse')$('velocity').value='-3';
  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.case===name));
  refreshInputs();reset(true);$('simulator').scrollIntoView({block:'start',behavior:'smooth'});
 }
@@ -37,17 +37,18 @@ $('algorithm').onchange=()=>reset();$('speed').onchange=()=>send({type:'rate',va
 for(const b of document.querySelectorAll('[data-case]'))b.onclick=()=>choose(b.dataset.case);
 for(const b of document.querySelectorAll('[data-lesson]'))b.onclick=()=>choose(b.dataset.lesson);
 for(const b of document.querySelectorAll('[data-chart]'))b.onclick=()=>{chart=b.dataset.chart;document.querySelectorAll('[data-chart]').forEach(x=>x.classList.toggle('selected',x===b));drawChart();};
-const telemetry=['time_s','output_angle_rad','output_speed_rad_s','id_A','iq_A','iq_reference_A','gear_torque_Nm','bus_V','rotor_angle_rad','winding_C','fet_C','state','fault','gates_on','duty_a','duty_b','duty_c','interval_peak_phase_current_A','target_angle_rad','external_load_Nm','stop_reaction_Nm','torque_reference_Nm','voltage_saturated','break_latched','rotor_speed_rad_s','current_reference_limited','fatal'];
+const telemetry=['time_s','output_angle_rad','output_speed_rad_s','id_A','iq_A','iq_reference_A','gear_torque_Nm','bus_V','rotor_angle_rad','winding_C','fet_C','state','fault','gates_on','duty_a','duty_b','duty_c','interval_peak_phase_current_A','target_angle_rad','external_load_Nm','stop_reaction_Nm','torque_reference_Nm','voltage_saturated','break_latched','rotor_speed_rad_s','current_reference_limited','fatal','stop_lower_limit_rad','stop_upper_limit_rad','stop_enabled','stop_penetration_rad'];
 $('export').onclick=()=>{
  const csv=telemetry.join(',')+'\n'+ui.rows.map(r=>r.join(',')).join('\n');
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='actuator-live-1kHz.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 let lastUi=0;
 worker.onmessage=({data:d})=>{
+ if(d.type==='rejected'){$('contact').checked=false;refreshInputs();$('notice').textContent=d.message;$('notice').hidden=false;return;}
  if(d.type==='error'){report(d.message);setRunning(false);return;}
  if(d.type==='ready'){
   ui.ready=true;for(const id of ['run','reset','step','push','fault','export'])$(id).disabled=false;
-  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';reset();return;
+  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';reset();const preset=new URLSearchParams(location.search).get('experiment');if(['tracking','disturbance','contact','reverse','fault'].includes(preset))choose(preset);return;
  }
  if(d.type==='running'){ui.running=d.value;if(ui.snapshot)update(ui.snapshot);return;}
  if(d.type==='reset')ui.rows=[];
@@ -55,6 +56,7 @@ worker.onmessage=({data:d})=>{
  if(rows.length){ui.rows.push(...rows);if(ui.rows.length>8000)ui.rows.splice(0,ui.rows.length-8000);ui.snapshot=rows.at(-1);if(performance.now()-lastUi>25||d.type==='reset'){update(ui.snapshot);lastUi=performance.now();}}
 };
 function update(r){
+ if(r.length>=31){$('contact').checked=!!r[29];refreshInputs();$('stop-limits').textContent=r[29]?`Free arc ${r[27].toFixed(3)} to ${r[28].toFixed(3)} rad · deflection ${(r[30]*1000).toFixed(2)} mrad`:'Stop disabled · no obstacle contact';}
  const n=(id,x,d=2,unit='')=>$(id).innerHTML=`${x.toFixed(d)} <small>${unit}</small>`;
  $('time').textContent=r[0].toFixed(3)+' s';n('q',r[1],3,'rad');n('tau',r[6],2,'N·m');n('iq',r[4],2,'A');n('bus',r[7],1,'V');
  $('angle-error').textContent=`error ${(r[18]-r[1]>=0?'+':'')+(r[18]-r[1]).toFixed(3)} rad`;
@@ -66,7 +68,7 @@ function update(r){
  $('engine-status').className='status'+(r[12]?' fault':ui.running?' running':'');
  let title='Following the target',text='The angle error sets output torque. FOC regulates q-axis current; the gearbox turns the output link.';
  if(r[12]){title='Gates off. Physics continues.';text='The driver fault is latched. Current decays and the load may still move. Reset starts a NEW virtual experiment; it does not acknowledge a real drive.';}
- else if(r[20]>.1){title='Contact produces a reaction torque';text='The angular stop prevents the target being reached. Current produces torque against the stop; the small displacement beyond 0.60 rad comes from compliance.';}
+ else if(Math.abs(r[20])>.1){title=r[20]<0?'Reverse contact: opposite face':'Contact: front face';text='The finite stop acts in both directions and on every turn. Signed reaction is a load subtracted from output torque. Small deflection is compliant contact, not free passage.';}
  else if(Math.abs(r[19])>.05){title='A load is pushing on the output';text=`Applied load: ${r[19].toFixed(1)} N·m. In impedance mode, static error is approximately load / Kp. Try Position mode to compare.`;}
  else if(ui.scenario==='disturbance'&&r[0]<.7){title='A disturbance is coming at 0.7 s';text='Watch angle, current, and torque together. A 4 N·m load pulse will last 120 simulated milliseconds. Use Push to repeat it.';}
  else if(ui.scenario==='fault'&&r[0]<.7){title='Driver trip scheduled at 0.7 s';text='A fault will disable the gates. Watch what happens to current and the moving output after electrical drive is removed.';}
@@ -108,7 +110,8 @@ async function setupScene(){
  function object(n,parent){
   const a=n.a;let obj;
   if(n.tag==='geom'){
-   if(a.group==='3'||nums(a.rgba,[0,0,0,1])[3]===0||a.name==='floor')return;
+   const proxy=a.group==='3';
+   if(a.name==='floor'||(proxy&&!['link','tip'].includes(a.name))||(!proxy&&nums(a.rgba,[0,0,0,1])[3]===0))return;
    const s=nums(a.size,[.01,.01,.01]),type=a.type||'sphere';let g;
    if(a.fromto){const f=nums(a.fromto),A=new THREE.Vector3(...f.slice(0,3)),B=new THREE.Vector3(...f.slice(3));const d=A.distanceTo(B);g=type==='capsule'?new THREE.CapsuleGeometry(s[0],d,5,20):new THREE.CylinderGeometry(s[0],s[0],d,28);obj=new THREE.Mesh(g,materials[a.material]);obj.position.copy(A).add(B).multiplyScalar(.5);obj.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),B.sub(A).normalize());}
    else{
@@ -116,7 +119,8 @@ async function setupScene(){
     const rgba=nums(a.rgba);let mat=materials[a.material];if(rgba.length)mat=new THREE.MeshStandardMaterial({color:new THREE.Color().setRGB(...rgba.slice(0,3),THREE.LinearSRGBColorSpace),roughness:.4});
     obj=new THREE.Mesh(g,mat||materials.metal);obj.position.fromArray(nums(a.pos,[0,0,0]));const q=nums(a.quat,[1,0,0,0]);obj.quaternion.set(q[1],q[2],q[3],q[0]);
    }
-   obj.castShadow=true;obj.receiveShadow=true;
+   if(proxy){obj.material=new THREE.MeshBasicMaterial({color:0xf9d47b,wireframe:true,transparent:true,opacity:.55});obj.visible=false;proxyParts.push(obj);}
+   obj.castShadow=!proxy;obj.receiveShadow=!proxy;
   }else{obj=new THREE.Group();obj.position.fromArray(nums(a.pos,[0,0,0]));const q=nums(a.quat,[1,0,0,0]);obj.quaternion.set(q[1],q[2],q[3],q[0]);}
   obj.name=a.name||n.tag;parent.add(obj);obj.userData.base=obj.quaternion.clone();
   if(obj.name==='rotor')rotor=obj;if(obj.name==='output')output=obj;
@@ -136,6 +140,7 @@ async function setupScene(){
  }
  for(const v of ['bench','motor','board'])$('view-'+v).onclick=()=>focus(v);
  $('cutaway').onclick=()=>{closed=!closed;for(const o of originalMaterials.keys())o.visible=!closed;$('cutaway').setAttribute('aria-pressed',String(closed));$('cutaway').textContent=closed?'Close motor':'Open motor';$('scene-label').textContent=closed?'Fixed windings · spinning rotor / lumped gearbox':'QDD / 6:1 compliant drive';};
+ $('colliders').onclick=()=>{const show=$('colliders').getAttribute('aria-pressed')!=='true';$('colliders').setAttribute('aria-pressed',String(show));proxyParts.forEach(o=>o.visible=show);};
  const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let down;
  renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
  renderer.domElement.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>4)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(world.children,true).find(h=>h.object.isMesh&&h.object.visible);if(hit)$('picked').textContent=hit.object.name.replaceAll('_',' ');});

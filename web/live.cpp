@@ -1,4 +1,5 @@
 #include "live.h"
+#include "stop.hpp"
 #include "qdd/plant.hpp"
 #include "qdd/protection.hpp"
 #include <algorithm>
@@ -17,7 +18,8 @@ struct Live {
  Drive drive; FastTrip trip{protection_config(),period}; DriveOutput output{};
  Command command{}; std::uint64_t ticks=0;
  double load=0,pulse=0,pulse_until=0,applied_load=0,contact_reaction=0,peak=0;
- bool contact=false,injected_fault=false,fatal=false;
+ qdd::web::PeriodicStop stop;
+ bool injected_fault=false,fatal=false;
  explicit Live(int a):drive(drive_config(a)){
   command.mode=Mode::Impedance;command.position=.4f;
   sensors.capture(plant.state,bus.voltage,inverter.fet_c,0,period);
@@ -37,7 +39,7 @@ struct Live {
    if(!captured&&phase<period/2)h=std::min(h,period/2-phase);
    if(h<=0)throw std::runtime_error("non-advancing browser integration step");
    applied_load=load+((t+phase<pulse_until)?pulse:0);
-   contact_reaction=contact&&plant.state.output_angle>.60 ? std::max(0.0,1200*(plant.state.output_angle-.60)+4*plant.state.output_speed) : 0;
+   contact_reaction=stop.reaction(plant.state.output_angle,plant.state.output_speed);
    const auto before=plant.currents();
    advance_bridge(plant,inverter,bus,phase+.5*h,applied_load+contact_reaction,h,trip.gate_allowed(output.gate_enable));
    sensors.analog_step_linear(before,plant.currents(),h);
@@ -62,7 +64,7 @@ int lab_set(int k,double v){
   case 2:if(std::abs(v)>6)return 0;l.command.velocity=float(v);break;
   case 3:if(std::abs(v)>8)return 0;l.command.torque=float(v);break;
   case 4:if(std::abs(v)>8)return 0;l.load=v;break;
-  case 5:if(v!=0&&v!=1)return 0;l.contact=v==1;break;
+  case 5:if(v!=0&&v!=1)return 0;if(v==0)l.stop.disable();else if(!l.stop.enable(l.plant.state.output_angle))return 0;break;
   case 6:if(v!=0&&v!=1)return 0;l.injected_fault=v==1;break;
   case 7:if(std::abs(v)>8)return 0;l.pulse=v;l.pulse_until=double(l.ticks)*period+.12;break;
   case 8:if(std::abs(v)>15)return 0;l.command.current.q=float(v);break;
@@ -88,6 +90,8 @@ double lab_get(int k){
   case 17:return l.peak;case 18:return l.command.position;case 19:return l.applied_load;case 20:return l.contact_reaction;
   case 21:return o.torque_reference;case 22:return o.voltage_saturated;case 23:return l.trip.latched();
   case 24:return s.rotor_speed;case 25:return o.reference_limited;case 26:return l.fatal;
+  case 27:return l.stop.lower();case 28:return l.stop.upper();case 29:return l.stop.enabled();
+  case 30:return l.stop.penetration(s.output_angle);
   default:return std::numeric_limits<double>::quiet_NaN();
  }
 }

@@ -33,9 +33,17 @@ Use it to learn FOC, compare controllers, test disturbance rejection, understand
 | Run and modify source | [**Quickstart**](docs/QUICKSTART.md) | Native C++ CLI, tests, and local MuJoCo viewer |
 | Add a controller | [`CurrentAlgorithm`](include/qdd/control.hpp) · [architecture](docs/ARCHITECTURE.md) | Shared current-control interface, not a separate JavaScript implementation |
 
+## Understand the controller and its code
+
+[**Control engineering & interactive pipeline**](https://tinmanlab.github.io/actuator/control.html) · [**Code & API reference**](https://tinmanlab.github.io/actuator/api.html)
+
+Follow a command through outer loops, current references, Clarke/Park transforms, PI/predictive FOC, SVPWM, the inverter, motor and sensor feedback. The guide includes signal units, sampling timelines, saturation, safety boundaries, and an interactive rotating-frame example. The API guide maps the actual C++ sources, all browser command/telemetry fields, Worker messages, C11 controller ABI, MuJoCo coupling, and a C++ example built by CTest.
+
+[**Try reverse contact**](https://tinmanlab.github.io/actuator/?experiment=reverse): the finite stop now reacts at both faces on every revolution. Turn on **Collision envelopes** to inspect the reduced collision geometry. Small spring deflection remains intentional; this is not a general browser 3D collision solver. Enabling a stop inside its occupied volume is rejected rather than teleporting the link.
+
 ## Your first experiment — 30 seconds
 
-1. **[Open the lab](https://tinmanlab.github.io/actuator/)** and press **Start simulation**. Move **Target angle**. Watch measured angle follow the reference.
+1. **[Open the lab](https://tinmanlab.github.io/actuator/)** and press **Start simulation**. Move **Target angle**. Watch output angle follow the reference.
 2. Press **Push +4 N·m / 120 ms**. Current and torque react. Then set a constant **2 N·m load**: an impedance controller yields by approximately `load / Kp`.
 3. Choose **Meet a stop**. The 0.85 rad target is beyond the 0.60 rad stop. The angle stops while reaction torque and current remain. **Trip driver** to see why gate-off does not instantly remove stored energy.
 
@@ -48,7 +56,7 @@ Use **Pause**, **+1 ms**, and **Export CSV** to inspect a result. **Reset experi
 | Position / impedance / velocity / torque / current mode | Outer-loop command sent to the same low-level drive |
 | Target, stiffness, damping, external load | Actual control/plant inputs, not animation settings |
 | PI FOC / relaxed predictive current | Current algorithm; changing it starts a new experiment |
-| Push / angular stop / driver trip | Disturbance, unilateral angular contact, or latched gate fault |
+| Push / angular stop / driver trip | Disturbance, two-sided periodic stop, or latched gate fault |
 | Bench / Motor / Board / Open motor | Visual inspection only, never physical parameters |
 | Export CSV | Latest 8 simulated seconds at 1 kHz, with explicit units |
 
