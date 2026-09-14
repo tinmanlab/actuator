@@ -37,7 +37,7 @@ onmessage=({data:d})=>{
   switch(d.type){
    case 'run':running=!!d.value;postMessage({type:'running',value:running});break;
    case 'reset':reset(d);break;
-   case 'set':set(d.key,Number(d.value));postMessage({type:'state',row:row()});break;
+   case 'set':set(d.key,Number(d.value));break; // Commands are not telemetry samples.
    case 'rate':rate=d.value===.25?.25:1;break;
    case 'step':if(!running){if(core._lab_step(20)!==20)throw Error('Step failed');postMessage({type:'samples',rows:[row()]});}break;
   }

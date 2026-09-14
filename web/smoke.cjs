@@ -1,4 +1,4 @@
-// Acceptance runs against built same-origin assets, then again against deployed Pages.
+// Run against built assets and again against the deployed public Pages URL.
 const {chromium}=require('@playwright/test');
 const fs=require('fs');
 (async()=>{
@@ -30,7 +30,10 @@ const fs=require('fs');
   await page.click('#run');await page.waitForTimeout(100);
   await page.evaluate(()=>window.scrollTo(0,0));await page.waitForTimeout(400);await page.screenshot({path:out+'/browser-lab.png',fullPage:false});
   const downloadPromise=page.waitForEvent('download');await page.click('#export');const download=await downloadPromise;await download.saveAs(out+'/browser-trace.csv');
-  ok(fs.readFileSync(out+'/browser-trace.csv','utf8').includes('iq_reference_A'),'CSV export has explicit current units');
+  const csv=fs.readFileSync(out+'/browser-trace.csv','utf8');
+  ok(csv.includes('iq_reference_A'),'CSV export has explicit current units');
+  const times=csv.trim().split('\n').slice(1).map(line=>Number(line.split(',')[0]));
+  ok(times.length>100&&times.every((t,i)=>!i||t>times[i-1]),'CSV timestamps strictly increase after commands and reset');
   await page.click('#run');await page.click('#fault');await page.waitForFunction(()=>labState.snapshot?.[12]===9);
   ok(await page.evaluate(()=>labState.snapshot[13]===0),'fault turns gates off');
   await page.click('#reset');await page.waitForTimeout(150);ok(await page.evaluate(()=>labState.snapshot[0]===0&&!labState.running),'reset creates paused fresh experiment');
@@ -46,7 +49,11 @@ const fs=require('fs');
   ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'narrow layout has no horizontal overflow');
   ok(!errors.length&&!failures.length,'no script errors or missing same-origin assets');
   const manifest=await page.evaluate(async()=>await (await fetch('build.json')).json());
-  if(process.env.EXPECTED_SHA)ok(manifest.source_commit===process.env.EXPECTED_SHA,'deployed source SHA matches tested commit');
+  if(process.env.EXPECTED_SHA){
+   ok(manifest.source_commit===process.env.EXPECTED_SHA,'deployed source SHA matches tested commit');
+   const hero=await page.request.get(new URL('media/browser-lab.png',base).href);
+   ok(hero.status()===200&&(await hero.body()).length>10000,'README screenshot is publicly available');
+  }
  }catch(e){checks.push({name:e.message,pass:false});await page.screenshot({path:out+'/failure.png',fullPage:true}).catch(()=>{});process.exitCode=1;}
  fs.writeFileSync(out+'/browser-acceptance.json',JSON.stringify({url:base,checks,errors,failures,accepted:checks.every(x=>x.pass)},null,2));
  console.log(JSON.stringify({checks,errors,failures},null,2));await browser.close();
