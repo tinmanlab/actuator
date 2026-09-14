@@ -1,0 +1,42 @@
+<mujoco model="QDD electromechanical lab">
+  <compiler angle="radian" inertiafromgeom="auto" />
+  <option timestep="0.00005" integrator="implicitfast" gravity="0 0 -9.81" iterations="80" tolerance="1e-10" />
+  <visual>
+    <global offwidth="1280" offheight="720" />
+    <quality shadowsize="2048" />
+    <headlight ambient="0.25 0.25 0.25" diffuse="0.65 0.65 0.65" />
+  </visual>
+  <default>
+    <geom friction="0.6 0.01 0.001" solref="0.004 1" solimp="0.95 0.99 0.001" />
+  </default>
+  <asset>
+    <texture name="floor" type="2d" builtin="checker" rgb1="0.17 0.19 0.22" rgb2="0.23 0.25 0.28" width="512" height="512" />
+    <material name="floor" texture="floor" texrepeat="4 4" reflectance="0.15" />
+    <material name="metal" rgba="0.6 0.65 0.7 1" specular="0.8" shininess="0.6" />
+    <material name="dark" rgba="0.07 0.085 0.1 1" specular="0.4" />
+    <material name="pcb" rgba="0.025 0.23 0.15 1" />
+    <material name="copper" rgba="0.85 0.42 0.16 1" />
+    <material name="arm" rgba="0.15 0.42 0.65 1" specular="0.7" />
+  </asset>
+  <worldbody>
+    <light pos="0.7 -1 2" dir="-0.3 0.3 -1" diffuse="0.8 0.8 0.8" castshadow="true" />
+    <light pos="-1 1 1.5" dir="0.4 -0.4 -1" diffuse="0.4 0.4 0.4" />
+    <geom name="floor" type="plane" size="3 3 .1" material="floor" />
+    <geom name="workbench" type="box" pos="0 0 .15" size=".56 .30 .025" material="metal" />
+    <geom name="stopper" type="box" pos="-.27 0 .36" size=".028 .085 .07" rgba=".8 .4 .08 1" />
+    <body name="rotor" pos="0 0 .6">
+      <inertial pos="0 0 0" mass=".1" diaginertia=".00008 .00008 .00008" />
+      <joint name="rotor_joint" type="hinge" axis="0 1 0" damping="0" />
+    </body>
+    <body name="output" pos="0 -.09 .6">
+      <joint name="output_joint" type="hinge" axis="0 1 0" damping=".02" frictionloss=".03" />
+      <geom name="hub" type="cylinder" size=".035 .012" quat=".70710678 .70710678 0 0" mass=".06" material="metal" contype="0" conaffinity="0" />
+      <geom name="link" type="capsule" fromto="0 0 0 0 0 -.32" size=".022" mass=".45" material="arm" />
+      <geom name="tip" type="sphere" pos="0 0 -.32" size=".031" mass=".09" material="metal" />
+    </body>
+    <body name="impact_ball" pos="-.20 -.09 1.1">
+      <freejoint name="ball_joint" />
+      <geom name="ball" type="sphere" size=".05" mass=".25" rgba=".9 .55 .12 1" />
+    </body>
+  </worldbody>
+</mujoco>
