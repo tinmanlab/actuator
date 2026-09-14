@@ -144,7 +144,17 @@ async function setupScene(){
 }
 setupScene().catch(e=>report('3D viewer: '+e.message));
 const filmData=[['tracking','Position tracking','A target change drives current, torque, and link motion.'],['disturbance','External disturbance','The controller reacts to an applied load.'],['contact','Stopper contact','The moving tip pushes against a physical stop.'],['impact','Falling-object impact','A free body hits the driven link.'],['fault','Driver fault','Drive is removed while mechanical dynamics continue.']];
-$('films').innerHTML=filmData.map(([id,title,text])=>`<article class="film" id="film-${id}"><video controls playsinline preload="none" poster="media/${id}.jpg" aria-label="Actual MuJoCo: ${title}"><source src="media/${id}.mp4" type="video/mp4"><a href="media/${id}.mp4">Play ${title}</a></video><div class="film-info"><h3>${title}</h3><p>${text}</p><a href="media/${id}.mp4">Open MP4 ↗</a></div></article>`).join('');
+$('films').innerHTML=filmData.map(([id,title,text])=>`<article class="film" id="film-${id}"><video controls playsinline preload="metadata" poster="media/${id}.jpg" aria-label="Actual MuJoCo: ${title}"><source src="media/${id}.webm" type='video/webm; codecs="vp9"'><source src="media/${id}.mp4" type="video/mp4"><a href="media/${id}.mp4">Play ${title}</a></video><div class="film-info"><h3>${title}</h3><p>${text}</p><p class="video-status" role="status">Recorded experiment · press Play</p><a href="media/${id}.mp4">Open MP4 ↗</a> · <a href="media/${id}.webm">Open WebM ↗</a></div></article>`).join('');
+// A rejected nested <source> need not reject play(). Expose source errors too.
+for (const film of document.querySelectorAll('.film')) {
+ const video=film.querySelector('video'),status=film.querySelector('.video-status');
+ const sources=[...video.querySelectorAll('source')],failed=new Set();
+ const failedPlayback=()=>{status.textContent='This browser could not play the recording. Try the MP4 or WebM link below.';};
+ for(const source of sources)source.addEventListener('error',()=>{failed.add(source);if(failed.size===sources.length)failedPlayback();});
+ video.addEventListener('error',failedPlayback);
+ video.addEventListener('playing',()=>{status.textContent='Playing actual MuJoCo recording · not live browser physics';});
+ video.addEventListener('pause',()=>{if(!video.error)status.textContent='Recording paused · press Play to continue';});
+}
 fetch('build.json').then(r=>r.json()).then(b=>{$('version').textContent=`Source ${b.source_commit.slice(0,12)} · local C++/WASM · 1 kHz telemetry`;$('version').dataset.sha=b.source_commit;}).catch(()=>{$('version').textContent='Build metadata unavailable';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&ui.running)setRunning(false);});
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();setRunning(!ui.running);}});

@@ -4,8 +4,8 @@ const fs=require('fs');
 (async()=>{
  const base=process.env.LAB_URL||'http://127.0.0.1:8765/';
  const out=process.env.LAB_EVIDENCE||'../results/browser';fs.mkdirSync(out,{recursive:true});
- const errors=[],failures=[],checks=[];let stage='launch';
- const save=()=>fs.writeFileSync(out+'/browser-acceptance.json',JSON.stringify({url:base,stage,checks,errors,failures,accepted:stage==='complete'&&checks.every(x=>x.pass)},null,2));
+ const errors=[],failures=[],checks=[],media={};let stage='launch';
+ const save=()=>fs.writeFileSync(out+'/browser-acceptance.json',JSON.stringify({url:base,stage,checks,errors,failures,media,accepted:stage==='complete'&&checks.every(x=>x.pass)},null,2));
  const mark=s=>{stage=s;console.log('BROWSER STAGE:',s);save();};
  const ok=(v,name)=>{checks.push({name,pass:!!v});console.log(v?'PASS:':'FAIL:',name);save();if(!v)throw Error(name);};
  const watchdog=setTimeout(()=>{checks.push({name:'Browser acceptance exceeded 180 seconds at '+stage,pass:false});save();process.exit(1);},180000);
@@ -35,7 +35,7 @@ const fs=require('fs');
   mark('motor inspection');await page.click('#view-motor');await page.click('#cutaway');
   ok(await page.locator('#cutaway').getAttribute('aria-pressed')==='true','cutaway inspection works');
   await page.click('#view-bench');await page.click('#cutaway');await page.click('#run');await page.waitForTimeout(100);
-  mark('screenshot and CSV');await page.evaluate(()=>window.scrollTo(0,0));await page.waitForTimeout(400);
+  mark('screenshot and CSV');await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo({top:0,behavior:'instant'});});await page.waitForFunction(()=>window.scrollY===0);await page.waitForTimeout(400);
   await page.screenshot({path:out+'/browser-lab.png',fullPage:false,timeout:15000});
   const downloadPromise=page.waitForEvent('download');await page.click('#export');const download=await downloadPromise;await download.saveAs(out+'/browser-trace.csv');
   const csv=fs.readFileSync(out+'/browser-trace.csv','utf8');ok(csv.includes('iq_reference_A'),'CSV export has explicit current units');
@@ -49,10 +49,16 @@ const fs=require('fs');
   ok(await page.evaluate(()=>labState.snapshot[12]===0&&Math.abs(labState.snapshot[1]-.4)<.04),'predictive algorithm runs');await page.click('#run');
   for(const id of ['tracking','disturbance','contact','impact','fault']){
    mark('video '+id);const video=page.locator('#film-'+id+' video');await video.scrollIntoViewIfNeeded();
-   // Do not await an unbounded HTMLMediaElement.play promise. Observe actual frames instead.
+   media[id]=await video.evaluate(v=>({mp4:v.canPlayType('video/mp4; codecs="avc1.64001f"'),vp9:v.canPlayType('video/webm; codecs="vp9"')}));
+   console.log('MEDIA SUPPORT:',id,JSON.stringify(media[id]));save();
+   // Bounded evidence: decoded frames and an advancing clock, not only play().
    await video.evaluate(v=>{v.muted=true;v.play().catch(e=>{v.dataset.playError=e.message;});});
-   await page.waitForFunction(id=>{const v=document.querySelector('#film-'+id+' video');return v.dataset.playError||(v.readyState>=2&&v.currentTime>0);},id,{timeout:15000});
-   ok(await video.evaluate(v=>!v.dataset.playError&&v.videoWidth===1280&&v.currentTime>0&&v.duration>0),'actual MuJoCo '+id+' video decodes');await video.evaluate(v=>v.pause());
+   try {
+    await page.waitForFunction(id=>{const v=document.querySelector('#film-'+id+' video');return v.error||v.dataset.playError||(v.readyState>=2&&v.currentTime>.05&&v.getVideoPlaybackQuality().totalVideoFrames>0);},id,{timeout:15000});
+   } finally {
+    Object.assign(media[id],await video.evaluate(v=>({source:v.currentSrc,ready:v.readyState,network:v.networkState,paused:v.paused,time:v.currentTime,width:v.videoWidth,height:v.videoHeight,duration:v.duration,frames:v.getVideoPlaybackQuality().totalVideoFrames,error:v.error?.message||v.dataset.playError||null})));save();
+   }
+   ok(!media[id].error&&media[id].width===1280&&media[id].frames>0&&media[id].time>0&&media[id].duration>0,'actual MuJoCo '+id+' video decodes');await video.evaluate(v=>v.pause());
   }
   mark('layout and asset integrity');await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);
   ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'narrow layout has no horizontal overflow');
@@ -65,5 +71,5 @@ const fs=require('fs');
   }
   mark('complete');
  }catch(e){checks.push({name:e.message,pass:false});save();await page.screenshot({path:out+'/failure.png',fullPage:true,timeout:5000}).catch(()=>{});process.exitCode=1;}
- save();console.log(JSON.stringify({stage,checks,errors,failures},null,2));clearTimeout(watchdog);await browser.close();
+ save();console.log(JSON.stringify({stage,checks,errors,failures,media},null,2));clearTimeout(watchdog);await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

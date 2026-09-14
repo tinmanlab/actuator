@@ -45,3 +45,19 @@ GitHub README supports images and links, not this application's Worker, iframe o
 ## Limits
 
 No browser MuJoCo claim; no SPICE, firmware flashing, sensorless control, MTPA/field weakening, calibrated real motor, real-time MCU timing, or hardware-safety certification. Reduced telemetry is not a switching oscilloscope. The native and WASM floating-point implementations are tested functionally, not asserted bit-identical across targets. The mechanical and electrical model remains synthetic.
+
+## Portable video playback
+
+The public player offers VP9/WebM first, with the original H.264/MP4 as a second
+source and direct links to both. Both encodings have matching decoded frame
+counts and dimensions and separate SHA-256 hashes in the media manifest.
+Playwright's open-source Chromium does not bundle every proprietary codec;
+therefore video acceptance records advertised codec support, selected source,
+media error state and decoded frame counts. It never treats a pending play promise
+or a poster image as playback. All five recordings must decode before deployment.
+
+References: [Playwright media codecs](https://playwright.dev/docs/browsers#media-codecs)
+and [Chrome's nested-source promise caveat](https://developer.chrome.com/blog/play-returns-promise).
+The browser-test dependency is pinned to Playwright 1.56.1 rather than the older
+version affected by the browser-installer TLS advisory. No credential or runtime
+permission is expanded by this dependency update.

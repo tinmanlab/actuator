@@ -1,1 +1,1 @@
-{"private":true,"name":"actuator-lab-view","version":"0.8.0","dependencies":{"three":"0.160.1"},"devDependencies":{"@playwright/test":"1.51.1"}}
+{"private":true,"name":"actuator-lab-view","version":"0.8.0","dependencies":{"three":"0.160.1"},"devDependencies":{"@playwright/test":"1.56.1"}}
