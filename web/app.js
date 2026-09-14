@@ -1,7 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import {OrbitControls} from './vendor/OrbitControls.js';
 const $=id=>document.getElementById(id), ui={ready:false,running:false,scenario:'tracking',rows:[],snapshot:null,modelLoaded:false,errors:[]};
-window.labState=ui; // Read-only diagnostic convention; tests inspect real worker output.
+window.labState=ui;
 const states=['Disabled','Calibrating','Ready','Armed','Fault'];
 const worker=new Worker('worker.js');let chart='position',renderer,camera,orbit,world,rotor,output,closed=false;
 const originalMaterials=new Map(),stopParts=[];const axes=new THREE.Vector3(0,1,0);
@@ -17,7 +17,7 @@ function reset(start=false){
  if(start)setRunning(true);
 }
 function choose(name){
- ui.scenario=name;$('mode').value='4';$('target').value=name==='contact'?'.85':'.4';$('load').value='0';$('kp').value='30';$('kd').value='1.8';$('contact').checked=name==='contact';
+ ui.scenario=name;$('mode').value='4';$('target').value=name==='contact'?'.85':'.4';$('load').value='0';$('kp').value='30';$('kd').value='1.8';for(const id of ['velocity','torque','current'])$(id).value='0';$('contact').checked=name==='contact';
  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.case===name));
  refreshInputs();reset(true);$('simulator').scrollIntoView({block:'start',behavior:'smooth'});
 }
@@ -47,9 +47,9 @@ worker.onmessage=({data:d})=>{
  if(d.type==='error'){report(d.message);setRunning(false);return;}
  if(d.type==='ready'){
   ui.ready=true;for(const id of ['run','reset','step','push','fault','export'])$(id).disabled=false;
-  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';return;
+  $('engine-status').textContent='Ready · C++ WebAssembly';$('run-note').textContent='Start a virtual experiment';reset();return;
  }
- if(d.type==='running'){ui.running=d.value;return;}
+ if(d.type==='running'){ui.running=d.value;if(ui.snapshot)update(ui.snapshot);return;}
  if(d.type==='reset')ui.rows=[];
  const rows=d.rows||(d.row?[d.row]:[]);
  if(rows.length){ui.rows.push(...rows);if(ui.rows.length>8000)ui.rows.splice(0,ui.rows.length-8000);ui.snapshot=rows.at(-1);if(performance.now()-lastUi>25||d.type==='reset'){update(ui.snapshot);lastUi=performance.now();}}
@@ -148,4 +148,6 @@ $('films').innerHTML=filmData.map(([id,title,text])=>`<article class="film" id="
 fetch('build.json').then(r=>r.json()).then(b=>{$('version').textContent=`Source ${b.source_commit.slice(0,12)} · local C++/WASM · 1 kHz telemetry`;$('version').dataset.sha=b.source_commit;}).catch(()=>{$('version').textContent='Build metadata unavailable';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&ui.running)setRunning(false);});
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();setRunning(!ui.running);}});
+// Zero feed-forward defaults are also visible in the form before the engine starts.
+for(const id of ['velocity','torque','current'])$(id).value='0';
 refreshInputs();drawChart();

@@ -10,7 +10,7 @@ function reset(data={}){
  const v=data.values||{};
  set(0,v.mode??4);set(1,v.position??(scenario==='contact'?.85:.4));set(4,v.load??0);
  set(5,scenario==='contact'?1:0);set(9,v.kp??30);set(10,v.kd??1.8);
- set(2,v.velocity??2);set(3,v.torque??1);set(8,v.current??2);
+ set(2,v.velocity??0);set(3,v.torque??0);set(8,v.current??0);
  postMessage({type:'reset',row:row(),scenario});
 }
 function advance(){
