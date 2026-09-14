@@ -1,0 +1,113 @@
+name: Browser lab and Pages
+on:
+  push:
+    branches: [main, feat/browser-lab]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: actuator-pages-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      MUJOCO_GL: osmesa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install rendering and WebAssembly toolchains
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y emscripten libosmesa6 ffmpeg
+          python -m pip install -r examples/mujoco/requirements.txt
+          npm install --prefix web --ignore-scripts
+          cd web && npx playwright install --with-deps chromium
+      - name: Build and test the shared C++ core
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure --parallel 2 --output-junit native-tests.xml
+      - name: Build actual WebAssembly and same-origin 3D assets
+        run: |
+          python tools/build_site.py
+          bash tools/build_wasm.sh
+      - name: Record and validate actual MuJoCo experiments
+        run: |
+          python tools/verify_mujoco.py --backend osmesa --record --output results/site_mujoco
+          python tools/site_media.py --evidence results/site_mujoco
+      - name: Test real browser controls, WebAssembly, viewer, and videos
+        run: |
+          python -m http.server 8765 --directory _site > /tmp/site-server.log 2>&1 &
+          cd web && node smoke.cjs
+          cd ..
+          cp results/browser/browser-lab.png _site/media/browser-lab.png
+          cp results/browser/browser-acceptance.json _site/browser-acceptance.json
+      - name: Retain the built site and exact-head browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-lab-${{ github.sha }}
+          path: |
+            _site/
+            results/browser/
+            build/native-tests.xml
+          retention-days: 30
+      - name: Package for Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the tested static site
+        id: deployment
+        uses: actions/deploy-pages@v4
+  verify-public:
+    if: github.ref == 'refs/heads/main'
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: |
+          npm install --prefix web --ignore-scripts
+          cd web && npx playwright install --with-deps chromium
+      - name: Exercise the public Pages URL and bind its source commit
+        env:
+          LAB_URL: ${{ needs.deploy.outputs.page_url }}
+          EXPECTED_SHA: ${{ github.sha }}
+          LAB_EVIDENCE: ../results/public-browser
+        run: cd web && node smoke.cjs
+      - name: Preserve deployed-site evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-browser-${{ github.sha }}
+          path: results/public-browser/
+          retention-days: 30
