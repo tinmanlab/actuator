@@ -71,11 +71,11 @@ def main():
             if a.live:
                 import mujoco.viewer
                 viewer=mujoco.viewer.launch_passive(model,data,key_callback=key)
-                viewer.cam.lookat[:]=[.025,.015,.44];viewer.cam.distance=1.25;viewer.cam.azimuth=-60;viewer.cam.elevation=-20
+                viewer.cam.lookat[:]=[.025,.015,.44];viewer.cam.distance=1.25;viewer.cam.azimuth=120;viewer.cam.elevation=-20
             if a.record:
                 from PIL import Image,ImageDraw,ImageFont
                 renderer=mujoco.Renderer(model,height=720,width=1280)
-                camera=mujoco.MjvCamera();camera.lookat[:]=[.025,.015,.44];camera.distance=1.25;camera.azimuth=-60;camera.elevation=-20
+                camera=mujoco.MjvCamera();camera.lookat[:]=[.025,.015,.44];camera.distance=1.25;camera.azimuth=120;camera.elevation=-20
                 try:font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',19)
                 except OSError:font=ImageFont.load_default()
                 encoder=subprocess.Popen(['ffmpeg','-v','error','-f','rawvideo','-pixel_format','rgb24','-video_size','1280x720','-framerate','30','-i','-','-an','-c:v','libx264','-crf','22','-pix_fmt','yuv420p','-movflags','+faststart',str(a.output/'mujoco.mp4')],stdin=subprocess.PIPE)

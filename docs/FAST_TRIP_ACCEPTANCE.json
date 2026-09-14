@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "scope": "Synthetic comparator/BREAK regression contract, NOT power-stage safety specifications or certification.",
+  "timing_tolerance_s": 1e-10,
+  "maximum_no_blanking_sampled_peak_A": 48.0,
+  "maximum_final_abs_iq_A": 0.000001,
+  "maximum_supervisor_delay_periods": 1,
+  "maximum_halving_peak_difference_A": 0.75,
+  "maximum_halving_gate_time_difference_periods": 1,
+  "minimum_software_stress_peak_A": 50.0,
+  "require_current_at_gate_off_positive": true,
+  "notes": [
+    "No performance threshold in docs/ACCEPTANCE.json is changed.",
+    "Current crossing is bracketed by endpoint observations; between-sample pulses can be missed.",
+    "Blanked cases retain measured peaks but have no <=48 A acceptance threshold.",
+    "Trip, PWM inhibit, power-stage off and software observation are distinct events.",
+    "No comparator timing or threshold here is an STM32/driver data-sheet value."
+  ]
+}

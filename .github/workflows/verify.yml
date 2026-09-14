@@ -10,6 +10,67 @@ concurrency:
   group: actuator-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  native:
+    name: Native / ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            build_type: Release
+            sanitize: 'OFF'
+            cc: gcc
+            cxx: g++
+          - name: Debug
+            build_type: Debug
+            sanitize: 'OFF'
+            cc: gcc
+            cxx: g++
+          - name: Clang-ASan-UBSan
+            build_type: Debug
+            sanitize: 'ON'
+            cc: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Configure and build
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DQDD_SANITIZE=${{ matrix.sanitize }}
+          cmake --build build --parallel 2
+      - name: Run every native and Python regression
+        run: ctest --test-dir build --output-on-failure --parallel 2 --output-junit native-tests.xml
+      - name: Bind source and preserve a portable source snapshot
+        if: matrix.name == 'Release'
+        run: |
+          mkdir -p results
+          git archive --format=zip --output=results/actuator-source.zip HEAD
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess
+          files=subprocess.check_output(['git','ls-files','-z']).decode().rstrip('\0').split('\0')
+          manifest={p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files}
+          Path('results/source-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          PY
+      - name: Preserve test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.name }}-${{ github.sha }}
+          path: |
+            build/native-tests.xml
+            build/Testing/Temporary/LastTest.log
+            results/
+          retention-days: 90
   mujoco:
     name: Actual MuJoCo and render
     runs-on: ubuntu-24.04
@@ -34,6 +95,11 @@ jobs:
           cmake --build build --parallel 2
       - name: Run actual-engine acceptance and record five scenarios
         run: python tools/verify_mujoco.py --backend osmesa --record --output results/mujoco_acceptance
+      - name: Decode every recorded frame
+        run: |
+          for file in results/mujoco_acceptance/*_sub1/mujoco.mp4; do
+            ffmpeg -v error -i "$file" -f null -
+          done
       - name: Preserve reports and logs on success or failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -41,4 +107,4 @@ jobs:
           name: mujoco-evidence-${{ github.sha }}
           path: results/mujoco_acceptance/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
