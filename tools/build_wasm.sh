@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+python3 tools/build_bench_model.py
 OUT=${1:-_site}
 mkdir -p "$OUT/wasm"
 em++ -O3 -std=c++17 -fexceptions -Iinclude web/live.cpp src/control.cpp src/plant.cpp src/protection.cpp \

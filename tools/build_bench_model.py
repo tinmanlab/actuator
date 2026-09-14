@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 import math
 import xml.etree.ElementTree as ET
+from stop_geometry import write_header
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'examples/mujoco'
@@ -151,5 +152,6 @@ def main():
     cyl(output,'tip_cap',[0,-.022,-.32],.015,.002,'dark')
     ET.indent(root,space='  ')
     ET.ElementTree(root).write(OUT/'bench.xml',encoding='unicode',xml_declaration=False)
+    write_header(OUT/'bench.xml',ROOT/'web/generated_stop.hpp')
     print('Wrote illustrative assembly with',len(list(root.iter('geom'))),'geoms;',len(specs)+1,'closed OBJ meshes')
 if __name__=='__main__':main()

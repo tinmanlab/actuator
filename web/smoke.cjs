@@ -47,6 +47,25 @@ const fs=require('fs');
   mark('predictive controller');await page.locator('aside details summary').click();await page.selectOption('#algorithm','1');await page.click('[data-case="tracking"]');
   await page.waitForFunction(()=>Math.abs((labState.snapshot?.[18]??99)-.4)<1e-6&&labState.snapshot?.[0]>.8);
   ok(await page.evaluate(()=>labState.snapshot[12]===0&&Math.abs(labState.snapshot[1]-.4)<.04),'predictive algorithm runs');await page.click('#run');
+  mark('reverse contact and return');
+  await page.selectOption('#algorithm','0');await page.click('[data-case="reverse"]');
+  await page.waitForFunction(()=>labState.scenario==='reverse'&&labState.snapshot?.[0]>2.5);
+  ok(await page.evaluate(()=>labState.snapshot[29]===1&&labState.snapshot[1]>-5.21&&labState.snapshot[1]<-5.17&&labState.snapshot[20]<-1&&labState.snapshot[12]===0),'reverse motion hits the opposite stop face without traversing it');
+  ok(await page.evaluate(()=>labState.rows.every(r=>r[30]<.03)),'recorded reverse contact deflection remains below 0.03 rad');
+  await page.click('#colliders');ok(await page.locator('#colliders').getAttribute('aria-pressed')==='true','collision envelopes can be inspected');
+  await page.click('#run');await page.locator('#viewport').screenshot({path:out+'/reverse-contact.png'});
+  await page.click('#colliders');const reverseAt=await page.evaluate(()=>labState.snapshot[0]);
+  await page.locator('#velocity').fill('3');await page.locator('#velocity').press('Tab');await page.click('#run');
+  await page.waitForFunction(t=>labState.snapshot?.[0]>t+3,reverseAt);
+  ok(await page.evaluate(()=>labState.snapshot[1]>.59&&labState.snapshot[1]<.63&&labState.snapshot[20]>1&&labState.snapshot[12]===0),'reverse contact releases and the return meets the front face');
+  mark('safe stop insertion');await page.click('[data-case="tracking"]');
+  await page.locator('#target').evaluate(e=>{e.value='.8';e.dispatchEvent(new Event('input',{bubbles:true}));});
+  await page.waitForFunction(()=>labState.snapshot?.[0]>.8&&labState.snapshot[1]>.75&&labState.snapshot[29]===0);
+  await page.check('#contact');await page.waitForFunction(()=>!document.getElementById('notice').hidden);
+  const rejectedAt=await page.evaluate(()=>labState.snapshot[0]);
+  await page.waitForFunction(t=>labState.snapshot[0]>t+.1,rejectedAt);
+  ok(await page.evaluate(()=>labState.snapshot[29]===0&&labState.snapshot[12]===0&&!document.getElementById('contact').checked&&document.getElementById('error').hidden),'occupied-stop insertion is rejected without stopping the engine');
+  await page.click('#run');
   for(const id of ['tracking','disturbance','contact','impact','fault']){
    mark('video '+id);const video=page.locator('#film-'+id+' video');await video.scrollIntoViewIfNeeded();
    media[id]=await video.evaluate(v=>({mp4:v.canPlayType('video/mp4; codecs="avc1.64001f"'),vp9:v.canPlayType('video/webm; codecs="vp9"')}));
@@ -62,6 +81,27 @@ const fs=require('fs');
   }
   mark('layout and asset integrity');await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);
   ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'narrow layout has no horizontal overflow');
+  mark('control guide and pipeline');
+  const guide=await browser.newPage({viewport:{width:1440,height:1000}});
+  guide.on('pageerror',e=>errors.push(e.message));
+  guide.on('response',r=>{if(r.status()>=400&&!r.url().endsWith('favicon.ico'))failures.push(r.status()+' '+r.url());});
+  await guide.goto(new URL('control.html',base).href,{waitUntil:'networkidle'});
+  await guide.locator('button[data-stage="pwm"]').click();
+  ok(await guide.locator('[data-detail="pwm"]').isVisible(),'pipeline block reveals units and implementation');
+  await guide.locator('button[data-stage="sense"]').focus();await guide.keyboard.press('Enter');
+  ok(await guide.locator('[data-detail="sense"]').isVisible(),'pipeline selection works from the keyboard');
+  await guide.locator('#pipeline').scrollIntoViewIfNeeded();await guide.screenshot({path:out+'/control-guide.png'});
+  await guide.locator('#electrical-angle').evaluate(e=>{e.value='90';e.dispatchEvent(new Event('input',{bubbles:true}));});
+  ok((await guide.locator('#phase-values').textContent()).includes('ia = -4.000 A'),'FOC coordinate example computes the declared phase current');
+  await guide.locator('#foc').scrollIntoViewIfNeeded();await guide.screenshot({path:out+'/foc-guide.png'});
+  for(const width of [390,768,1440]){await guide.setViewportSize({width,height:900});ok(await guide.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'control guide layout at '+width+' px');}
+  await guide.goto(new URL('api.html',base).href,{waitUntil:'networkidle'});
+  ok(await guide.locator('[data-set]').count()===11&&await guide.locator('[data-get]').count()===31,'API documents all 11 commands and 31 telemetry fields');
+  ok((await guide.locator('#live-example').textContent()).includes('lab_step(100)'),'API page includes the compiled C++ example');
+  await guide.screenshot({path:out+'/api-guide.png'});
+  for(const width of [390,768,1440]){await guide.setViewportSize({width,height:900});ok(await guide.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'API guide layout at '+width+' px');}
+  if(process.env.EXPECTED_SHA){await guide.waitForFunction(()=>document.getElementById('guide-version').textContent.startsWith('Source '));ok((await guide.locator('[data-source]').first().getAttribute('href')).includes(process.env.EXPECTED_SHA),'guide source links bind the deployed commit');}
+  await guide.close();
   ok(!errors.length&&!failures.length,'no script errors or missing same-origin assets');
   const manifest=await page.evaluate(async()=>await (await fetch('build.json')).json());
   if(process.env.EXPECTED_SHA){

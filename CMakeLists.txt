@@ -121,14 +121,24 @@ if(QDD_HOST)
  if(Python3_Interpreter_FOUND)
   add_custom_target(qdd_assets ALL
    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/build_bench_model.py
-   BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/examples/mujoco/bench.xml
+   BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/examples/mujoco/bench.xml ${CMAKE_CURRENT_SOURCE_DIR}/web/generated_stop.hpp
    COMMENT "Generate deterministic illustrative QDD geometry")
  endif()
 endif()
 
-# Same electrical/control components, a host- and WASM-testable live facade.
-if(QDD_HOST AND BUILD_TESTING)
+# Browser adapters depend on a geometry-derived contact envelope; core-only builds do not.
+if(QDD_HOST AND BUILD_TESTING AND Python3_Interpreter_FOUND)
  add_executable(qdd_web_live_tests tests/test_web_live.cpp web/live.cpp)
  target_link_libraries(qdd_web_live_tests PRIVATE qdd_host)
+ add_dependencies(qdd_web_live_tests qdd_assets)
  add_test(NAME browser_live_native_contract COMMAND qdd_web_live_tests)
+ add_executable(qdd_reverse_tests tests/test_reverse_contact.cpp web/live.cpp)
+ target_link_libraries(qdd_reverse_tests PRIVATE qdd_host)
+ add_dependencies(qdd_reverse_tests qdd_assets)
+ add_test(NAME browser_reverse_contact_roundtrip COMMAND qdd_reverse_tests)
+ add_executable(qdd_live_example examples/live_api.cpp web/live.cpp)
+ target_link_libraries(qdd_live_example PRIVATE qdd_host)
+ add_dependencies(qdd_live_example qdd_assets)
+ add_test(NAME documented_live_api_example COMMAND qdd_live_example)
+ add_test(NAME stop_geometry_and_guide_contracts COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/tests -p test_guides.py)
 endif()

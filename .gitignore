@@ -12,3 +12,5 @@ examples/mujoco/assets/
 examples/mujoco/bench.xml
 /_site/
 /web/node_modules/
+
+/web/generated_stop.hpp

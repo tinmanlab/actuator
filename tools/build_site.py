@@ -35,7 +35,7 @@ def main():
  for f in (ROOT/'docs/tutorials').glob('*.md'):
   shutil.copy2(f,docs/f.name)
  sha=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,text=True,capture_output=True)
- (out/'build.json').write_text(json.dumps({'source_commit':sha.stdout.strip() if sha.returncode==0 else 'local', 'engine':'C++ control/plant/protection -> WASM','physics':'averaged inverter; two-inertia 1-axis QDD; unilateral angular stop','telemetry_hz':1000,'control_hz':20000},indent=2))
+ (out/'build.json').write_text(json.dumps({'source_commit':sha.stdout.strip() if sha.returncode==0 else 'local', 'engine':'C++ control/plant/protection -> WASM','physics':'averaged inverter; two-inertia 1-axis QDD; geometry-derived two-sided periodic stop','telemetry_hz':1000,'control_hz':20000},indent=2))
  (out/'.nojekyll').touch()
  print('Static site prepared:',out)
 if __name__=='__main__':main()
