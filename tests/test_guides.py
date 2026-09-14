@@ -35,6 +35,16 @@ class Contracts(unittest.TestCase):
   d=Document((ROOT/'web/control.html').read_text())
   self.assertGreaterEqual(d.svg,3);self.assertGreaterEqual(d.titles,4)
   self.assertTrue({'pipeline','foc','timing','contact','sources','stage-detail'}<=d.ids)
+ def test_single_sources_and_no_fake_plot_model(self):
+  refs=(ROOT/'web/references.html').read_text()
+  self.assertEqual(set(map(int,re.findall(r'id="r(\d+)"',refs))),set(range(1,15)))
+  physics=(ROOT/'web/physics.html').read_text()
+  self.assertEqual(physics.count('class="signal-plot"'),8)
+  self.assertIn('not a closed-loop drive',physics)
+  self.assertIn('switching-energy loss',physics)
+  readme=(ROOT/'README.md').read_text()
+  self.assertLess(len(readme.split()),700)
+  self.assertIn('physics.html',readme)
  def test_api_has_complete_set_and_get_tables(self):
   text=(ROOT/'web/api.html').read_text()
   self.assertEqual(set(map(int,re.findall(r'data-set="(\d+)"',text))),set(range(11)))
@@ -45,11 +55,13 @@ class Contracts(unittest.TestCase):
   self.assertEqual(snippet,(ROOT/'examples/live_api.cpp').read_text())
  def test_internal_links_resolve(self):
   from urllib.parse import urlsplit
-  for name in ('control.html','api.html'):
+  for name in ('control.html','api.html','physics.html','references.html'):
    doc=Document((ROOT/'web'/name).read_text())
    for href in doc.links:
     u=urlsplit(href)
     if u.scheme or u.netloc:continue
+    if u.path.startswith('data/'):
+     self.assertIn(u.path,('data/native-signals.zip','data/signals.json','data/signals-manifest.json'));continue
     target=ROOT/'web'/(u.path or name)
     self.assertTrue(target.exists(),(name,href))
     if u.fragment and target.suffix=='.html':self.assertIn(u.fragment,Document(target.read_text()).ids,(name,href))

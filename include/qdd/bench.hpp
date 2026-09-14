@@ -14,6 +14,7 @@ struct BenchConfig {
  bool log_protection=false;
  bool log_diagnostic=false;
  std::string diagnostic_path;
+ std::string power_path; // Optional period-averaged diagnostic; default traces unchanged.
  bool log_csv=true;
 };
 struct Row {

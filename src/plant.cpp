@@ -57,6 +57,7 @@ void Plant::step(ABCd v,double load,double dt) {
  state={x[0],x[1],x[2],x[3],x[4],x[5],x[6],x[7]};
 }
 void Plant::step_electrical_endpoint(Dq<double> end,double load,double dt) {
+ if(!std::isfinite(end.d)||!std::isfinite(end.q)||!std::isfinite(load)||!positive(dt))throw std::invalid_argument("invalid diode endpoint/time step");
  Vector x{state.id,state.iq,state.rotor_angle,state.rotor_speed,state.output_angle,state.output_speed,state.winding_c,state.case_c};
  const double old_d=x[0],old_q=x[1];
  auto deriv=[&](Vector y,double fraction){
@@ -66,6 +67,7 @@ void Plant::step_electrical_endpoint(Dq<double> end,double load,double dt) {
  auto add=[](Vector a,const Vector& b,double scale){for(std::size_t k=0;k<a.size();k++)a[k]+=scale*b[k];return a;};
  const auto k1=deriv(x,0),k2=deriv(add(x,k1,dt/2),0.5),k3=deriv(add(x,k2,dt/2),0.5),k4=deriv(add(x,k3,dt),1);
  for(std::size_t k=2;k<x.size();k++)x[k]+=dt*(k1[k]+2*k2[k]+2*k3[k]+k4[k])/6;
+ for(double a:x)if(!std::isfinite(a))throw std::runtime_error("nonfinite diode/mechanical state");
  state={end.d,end.q,x[2],x[3],x[4],x[5],x[6],x[7]};
 }
 ABCd Plant::currents() const {return inverse_clarke(inverse_park(Dq<double>{state.id,state.iq},double(c_.motor.pole_pairs)*state.rotor_angle));}
@@ -116,7 +118,7 @@ Leg Inverter::leg(double d,double phase,double i,double bus,bool enabled) const 
  return r;
 }
 InverterOutput Inverter::evaluate(double phase,ABCd currents,double bus,bool enable) const {
- InverterOutput r;
+ InverterOutput r;r.power_current=currents;r.power_vbus=bus;
  const double values[]={currents.a,currents.b,currents.c};const double duties[]={duty_.a,duty_.b,duty_.c};
  for(int k=0;k<3;k++) {
   const double i=values[k],d=duties[k];
@@ -134,6 +136,7 @@ InverterOutput Inverter::evaluate(double phase,ABCd currents,double bus,bool ena
  return r;
 }
 void Inverter::heat(double loss,double dt) {
+ if(!nonnegative(loss)||!positive(dt))throw std::invalid_argument("invalid inverter dissipation/time step");
  const double equilibrium=c_.ambient+loss*c_.fet_ambient_r;
  fet_c=equilibrium+(fet_c-equilibrium)*std::exp(-dt/(c_.fet_capacity*c_.fet_ambient_r));
 }
@@ -224,6 +227,7 @@ InverterOutput advance_bridge(Plant& plant,Inverter& inverter,DcLink& bus,double
    if(!feasible)continue;
    found=true;endpoint={x[0],x[1]};
    stage.bus_current=stage.loss=0;
+   stage.power_current={amps[0],amps[1],amps[2]};stage.power_vbus=bus.voltage;
    const double neutral=(poles[0]+poles[1]+poles[2])/3;
    stage.voltage={poles[0]-neutral,poles[1]-neutral,poles[2]-neutral};
    for(int k=0;k<3;k++) {

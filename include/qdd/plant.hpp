@@ -44,7 +44,11 @@ struct InverterConfig {
  Fidelity fidelity=Fidelity::Averaged;
 };
 struct Leg {bool high=false,low=false; double pole_voltage=0,bus_current=0,loss=0;};
-struct InverterOutput {ABCd voltage{};double bus_current=0,loss=0;std::array<Leg,3> legs{};};
+struct InverterOutput {
+ ABCd voltage{};double bus_current=0,loss=0;std::array<Leg,3> legs{};
+ // Same evaluation state as voltage/loss, not the later plant endpoint.
+ ABCd power_current{};double power_vbus=0;
+};
 class Inverter {
  InverterConfig c_; ABC duty_{0.5f,0.5f,0.5f};
  std::array<double,16> edges_{};int edge_count_=0;
