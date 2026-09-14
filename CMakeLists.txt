@@ -125,3 +125,10 @@ if(QDD_HOST)
    COMMENT "Generate deterministic illustrative QDD geometry")
  endif()
 endif()
+
+# Same electrical/control components, a host- and WASM-testable live facade.
+if(QDD_HOST AND BUILD_TESTING)
+ add_executable(qdd_web_live_tests tests/test_web_live.cpp web/live.cpp)
+ target_link_libraries(qdd_web_live_tests PRIVATE qdd_host)
+ add_test(NAME browser_live_native_contract COMMAND qdd_web_live_tests)
+endif()
