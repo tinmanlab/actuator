@@ -1,4 +1,4 @@
-// Run against built assets and again against the deployed public Pages URL.
+// Real browser acceptance. Durations are relative to commands, not wall-clock rendering.
 const {chromium}=require('@playwright/test');
 const fs=require('fs');
 (async()=>{
@@ -20,10 +20,16 @@ const fs=require('fs');
   ok(await page.evaluate(x=>labState.snapshot[0]===x,t),'pause freezes simulation time');
   await page.click('#step');await page.waitForTimeout(150);
   ok(await page.evaluate(x=>Math.abs(labState.snapshot[0]-x-.001)<1e-9,t),'single step advances one millisecond');
+  const targetAt=await page.evaluate(()=>labState.snapshot[0]);
   await page.locator('#target').evaluate(e=>{e.value='.7';e.dispatchEvent(new Event('input',{bubbles:true}));});await page.click('#run');
-  await page.waitForFunction(()=>labState.snapshot?.[0]>1.7);ok(await page.evaluate(()=>Math.abs(labState.snapshot[1]-.7)<.04),'target slider changes physical trajectory');
-  await page.click('#push');await page.waitForFunction(()=>labState.snapshot?.[19]>3.9);ok(true,'push reaches C++ load input');
-  await page.click('[data-case="contact"]');await page.waitForFunction(()=>labState.snapshot?.[0]>1.2);
+  await page.waitForFunction(start=>labState.snapshot?.[0]>start+.8,targetAt);
+  ok(await page.evaluate(()=>Math.abs(labState.snapshot[1]-.7)<.04),'target slider changes physical trajectory');
+  const pulseAt=await page.evaluate(()=>labState.snapshot[0]);
+  await page.click('#push');
+  await page.waitForFunction(start=>labState.rows.some(r=>r[0]>=start&&r[19]>3.9),pulseAt);
+  ok(true,'push reaches C++ load input');
+  await page.click('[data-case="contact"]');
+  await page.waitForFunction(()=>labState.snapshot?.[18]===.8500000238418579&&labState.snapshot?.[0]>1.2);
   ok(await page.evaluate(()=>labState.snapshot[1]>.59&&labState.snapshot[1]<.64&&labState.snapshot[20]>1),'contact constrains angle and produces reaction');
   await page.click('#view-motor');await page.click('#cutaway');ok(await page.locator('#cutaway').getAttribute('aria-pressed')==='true','cutaway inspection works');
   await page.click('#view-bench');await page.click('#cutaway');
@@ -36,8 +42,10 @@ const fs=require('fs');
   ok(times.length>100&&times.every((t,i)=>!i||t>times[i-1]),'CSV timestamps strictly increase after commands and reset');
   await page.click('#run');await page.click('#fault');await page.waitForFunction(()=>labState.snapshot?.[12]===9);
   ok(await page.evaluate(()=>labState.snapshot[13]===0),'fault turns gates off');
-  await page.click('#reset');await page.waitForTimeout(150);ok(await page.evaluate(()=>labState.snapshot[0]===0&&!labState.running),'reset creates paused fresh experiment');
-  await page.locator('aside details summary').click();await page.selectOption('#algorithm','1');await page.click('[data-case="tracking"]');await page.waitForFunction(()=>labState.snapshot?.[0]>.8);
+  await page.click('#reset');await page.waitForFunction(()=>labState.snapshot?.[0]===0&&!labState.running);
+  ok(true,'reset creates paused fresh experiment');
+  await page.locator('aside details summary').click();await page.selectOption('#algorithm','1');await page.click('[data-case="tracking"]');
+  await page.waitForFunction(()=>Math.abs((labState.snapshot?.[18]??99)-.4)<1e-6&&labState.snapshot?.[0]>.8);
   ok(await page.evaluate(()=>labState.snapshot[12]===0&&Math.abs(labState.snapshot[1]-.4)<.04),'predictive algorithm runs');
   await page.click('#run');
   for(const id of ['tracking','disturbance','contact','impact','fault']){
