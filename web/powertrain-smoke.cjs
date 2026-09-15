@@ -25,6 +25,7 @@ const fs=require('fs');
    ok(await page.locator('#film-'+id+' video').evaluate(v=>v.loop&&v.muted),id+' video is configured for muted looping');
   }
   const gif=await page.request.get(new URL('media/feature-tour.gif',base).href);ok(gif.ok()&&(await gif.body()).subarray(0,3).toString()==='GIF','README GIF publicly served');
+  await page.locator('#recordings').evaluate(e=>e.open=true);
   const video=page.locator('#film-fault video');await video.scrollIntoViewIfNeeded();
   await video.evaluate(v=>{v.addEventListener('timeupdate',()=>{if(v.dataset.armed==='1'&&v.currentTime<.5)v.dataset.wrapped='1';});v.muted=true;v.play();});
   await page.waitForFunction(()=>document.querySelector('#film-fault video').readyState>=2);
