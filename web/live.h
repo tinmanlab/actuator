@@ -11,6 +11,9 @@ double lab_get(int field);
 // No previous control tick is indicated by field 1 == -1 after reset.
 enum { LAB_SIGNAL_COUNT = 28 };
 double lab_signal(int field);
+/* Read-only period-mean power [16] and frozen-duty PWM reconstruction. */
+double lab_power(int field);
+double lab_pwm(double phase_seconds, int field);
 #ifdef __cplusplus
 }
 #endif

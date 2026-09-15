@@ -1,3 +1,4 @@
+import {createDashboard} from './dashboard.js';
 import {createLivePipeline} from './home-pipeline.js';
 import * as THREE from './vendor/three.module.js';
 import {OrbitControls} from './vendor/OrbitControls.js';
@@ -6,6 +7,7 @@ window.labState=ui;
 const states=['Disabled','Calibrating','Ready','Armed','Fault'];
 const worker=new Worker('worker.js');let chart='position',renderer,camera,orbit,world,rotor,output,closed=false;
 const pipeline=createLivePipeline(setChart);
+const dashboard=createDashboard();
 const originalMaterials=new Map(),stopParts=[],proxyParts=[];const axes=new THREE.Vector3(0,1,0);
 function report(message){ui.errors.push(message);$('error').hidden=false;$('error').textContent=message+' Reload the page to retry. For file:// use the hosted site or a local HTTP server.';$('engine-status').textContent='Engine unavailable';$('engine-status').className='status fault';}
 worker.onerror=e=>report(e.message||'Worker failed to load');
@@ -41,7 +43,7 @@ function refreshInputs(){
 }
 for(const [id,key] of [['mode',0],['target',1],['velocity',2],['torque',3],['load',4],['current',8],['kp',9],['kd',10]]){
  $(id).addEventListener(id==='target'||id==='load'?'input':'change',()=>{
-  const e=$(id);if(!e.checkValidity()){e.reportValidity();return;}refreshInputs();send({type:'set',key,value:+e.value});if(id==='mode')setChart(modeChart());if(ui.snapshot)pipeline.update(ui.snapshot,ui.signal,values());
+  const e=$(id);if(!e.checkValidity()){e.reportValidity();return;}refreshInputs();send({type:'set',key,value:+e.value});if(id==='mode')setChart(modeChart());if(ui.snapshot)update(ui.snapshot);
  });
 }
 $('run').onclick=()=>setRunning(!ui.running);$('reset').onclick=()=>reset();$('step').onclick=()=>send({type:'step'});
@@ -57,6 +59,7 @@ $('export').onclick=()=>{
 };
 let lastUi=0;
 worker.onmessage=({data:d})=>{
+ dashboard.ingest(d);
  if(d.type==='rejected'){$('contact').checked=false;refreshInputs();$('notice').textContent=d.message;$('notice').hidden=false;return;}
  if(d.type==='error'){report(d.message);setRunning(false);return;}
  if(d.type==='ready'){
@@ -69,9 +72,10 @@ worker.onmessage=({data:d})=>{
  if(rows.length){ui.rows.push(...rows);if(ui.rows.length>8000)ui.rows.splice(0,ui.rows.length-8000);ui.snapshot=rows.at(-1);ui.signal=d.signal;if(performance.now()-lastUi>25||d.type==='reset'||!ui.running){update(ui.snapshot);lastUi=performance.now();}}
 };
 function update(r){
+ dashboard.update(!ui.running);
  if(r.length>=31){$('contact').checked=!!r[29];refreshInputs();$('stop-limits').textContent=r[29]?`Free arc ${r[27].toFixed(3)} to ${r[28].toFixed(3)} rad · deflection ${(r[30]*1000).toFixed(2)} mrad`:'Stop disabled · no obstacle contact';}
  $('time').textContent=r[0].toFixed(3)+' s';
- pipeline.update(r,ui.signal,values());
+ pipeline.update(r,ui.signal,{...values(),running:ui.running});
  $('load-reaction').textContent=`${r[19].toFixed(2)} / ${r[20].toFixed(2)} N·m`;
  $('temperature').textContent=`${r[9].toFixed(1)} / ${r[10].toFixed(1)} °C`;$('saturation').textContent=r[22]?'Limited by bus voltage':'No';
  $('engine-status').textContent=r[12]?`Fault latched · code ${r[12]}`:ui.running?'Running · C++ WebAssembly':'Paused · C++ WebAssembly';
@@ -103,15 +107,15 @@ function drawChart(){
  const pad=Math.max(.1,(hi-lo)*.12);lo-=pad;hi+=pad;const left=45,right=w-12,top=7,bottom=h-24;
  const x=t=>left+(t-start)/(Math.max(4,end-start))*(right-left),y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top);
  ctx.font='10px ui-monospace,monospace';ctx.textAlign='right';
- for(let i=0;i<5;i++){const v=lo+(hi-lo)*i/4,Y=y(v);ctx.strokeStyle='#e1e7de';ctx.beginPath();ctx.moveTo(left,Y);ctx.lineTo(right,Y);ctx.stroke();ctx.fillStyle='#75836f';ctx.fillText(v.toFixed(2),left-7,Y+3);}
- ctx.textAlign='center';for(let i=0;i<=4;i++){const t=start+i;ctx.fillStyle='#75836f';ctx.fillText(t.toFixed(1)+' s',x(t),h-5);}
- for(let s=hasReference?1:0;s>=0;s--){ctx.beginPath();ctx.strokeStyle=s?'#b17b32':'#21745d';ctx.lineWidth=s?1.4:1.9;ctx.setLineDash(s?[5,3]:[]);const stride=Math.max(1,Math.floor(r.length/(w*2)));let first=true;for(let i=0;i<r.length;i+=stride){const px=x(r[i][0]),py=y(r[i][ix[s]]);if(first){ctx.moveTo(px,py);first=false;}else ctx.lineTo(px,py);}ctx.stroke();}ctx.setLineDash([]);
+ for(let i=0;i<5;i++){const v=lo+(hi-lo)*i/4,Y=y(v);ctx.strokeStyle='#294455';ctx.beginPath();ctx.moveTo(left,Y);ctx.lineTo(right,Y);ctx.stroke();ctx.fillStyle='#a4bbca';ctx.fillText(v.toFixed(2),left-7,Y+3);}
+ ctx.textAlign='center';for(let i=0;i<=4;i++){const t=start+i;ctx.fillStyle='#a4bbca';ctx.fillText(t.toFixed(1)+' s',x(t),h-5);}
+ for(let s=hasReference?1:0;s>=0;s--){ctx.beginPath();ctx.strokeStyle=s?'#ffc971':'#5ce4bb';ctx.lineWidth=s?1.4:1.9;ctx.setLineDash(s?[5,3]:[]);const stride=Math.max(1,Math.floor(r.length/(w*2)));let first=true;for(let i=0;i<r.length;i+=stride){const px=x(r[i][0]),py=y(r[i][ix[s]]);if(first){ctx.moveTo(px,py);first=false;}else ctx.lineTo(px,py);}ctx.stroke();}ctx.setLineDash([]);
 }
 const nums=(s,def=[])=>s?s.split(/\s+/).map(Number):def;
 async function setupScene(){
  const response=await fetch('scene.json');if(!response.ok)throw Error('Model asset is missing');const data=await response.json();
  renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.2;
- world=new THREE.Scene();world.background=new THREE.Color('#1c272b');
+ world=new THREE.Scene();world.background=new THREE.Color('#0c1d29');
  camera=new THREE.PerspectiveCamera(38,1,.005,30);camera.up.set(0,0,1);
  orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=true;orbit.minDistance=.1;orbit.maxDistance=3;orbit.target.set(.05,0,.43);
  world.add(new THREE.HemisphereLight(0xe5f1ed,0x374044,2.2));
@@ -143,11 +147,19 @@ async function setupScene(){
   for(const child of n.children)if(child.tag!=='joint')object(child,obj);
  }
  object(data.world,world);
+ // Readable component labels are scene annotations, never extra collision bodies.
+ for(const [label,pos] of [['MOTOR + 6:1 OUTPUT',[-.04,0,.72]],['INVERTER / MCU',[.29,-.015,.26]],['48 V DC SOURCE',[.36,.20,.32]]]){
+  const canvas=document.createElement('canvas');canvas.width=480;canvas.height=72;const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#102c3de6';ctx.fillRect(0,0,480,72);ctx.strokeStyle='#53788c';ctx.strokeRect(1,1,478,70);
+  ctx.fillStyle='#dcedf7';ctx.font='25px sans-serif';ctx.textAlign='center';ctx.fillText(label,240,45);
+  const mat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),depthTest:false,transparent:true});
+  const sprite=new THREE.Sprite(mat);sprite.position.fromArray(pos);sprite.scale.set(.16,.024,1);sprite.renderOrder=3;world.add(sprite);
+ }
  const grid=new THREE.GridHelper(4,40,0x40545a,0x2f4045);grid.rotation.x=Math.PI/2;grid.position.z=-.003;world.add(grid);
  function resize(){const r=$('viewport').getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();drawChart();}
  new ResizeObserver(resize).observe($('viewport'));resize();
  function focus(which){
-  const points={bench:[[.84,-1.30,1.04],[.05,0,.43]],motor:[[.17,-.33,.76],[0,.005,.60]],board:[[.43,-.18,.43],[.29,.025,.20]]};
+  const points={bench:[[1.02,-1.24,1.02],[.12,.03,.39]],motor:[[.17,-.33,.76],[0,.005,.60]],board:[[.43,-.18,.43],[.29,.025,.20]]};
   camera.position.fromArray(points[which][0]);orbit.target.fromArray(points[which][1]);orbit.update();
   for(const name of ['bench','motor','board'])$('view-'+name).classList.toggle('selected',which===name);
  }
