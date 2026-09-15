@@ -64,7 +64,7 @@ export function createDashboard(){
  function setPwmPlaying(value){
   state.pwmPlaying=!!value;
   const button=$('pwm-replay');if(button){button.textContent=state.pwmPlaying?'Pause PWM replay':'Play PWM replay';button.setAttribute('aria-pressed',String(state.pwmPlaying));}
-  const status=$('pwm-replay-status');if(status)status.textContent=state.pwmPlaying?'Auto replaying one reconstructed 50 μs period':'Paused for manual inspection';
+  const status=$('pwm-replay-status');if(status)status.textContent=state.pwmPlaying?'Stepping through native gate-change events in one reconstructed 50 μs period':'Paused for manual inspection';
  }
  function gates(){
   if(!state.wave||!state.wave.rows.length)return;
@@ -86,10 +86,18 @@ export function createDashboard(){
   controls.append(replay,replayStatus);phaseCursor.insertAdjacentElement('afterend',controls);
   replay.onclick=()=>setPwmPlaying(!state.pwmPlaying);
   setPwmPlaying(true);
+  const gateSignature=row=>row.slice(4,10).map(v=>v?'1':'0').join('');
   state.pwmTimer=setInterval(()=>{
    if(!state.pwmPlaying||document.hidden||!state.wave?.rows?.length)return;
-   const slider=$('pwm-phase'),next=(Number(slider.value)+1.25)%50;slider.value=next.toFixed(3);gates();
-  },60);
+   const slider=$('pwm-phase'),rows=state.wave.rows,current=Number(slider.value)*1e-6;
+   let sample=rows[0];for(const row of rows){if(row[0]>current)break;sample=row;}
+   const signature=gateSignature(sample);
+   let next=rows.find(row=>row[0]>current+1e-12&&gateSignature(row)!==signature);
+   if(!next)next=rows.find(row=>gateSignature(row)!==signature);
+   if(next)slider.value=String(Math.min(49.999,next[0]*1e6+.0005));
+   else slider.value=String((Number(slider.value)+1.25)%50);
+   gates();
+  },220);
  }
  function energy(history){
   const end=history.at(-1).r[0],a=history.filter(x=>x.r[0]>=end-.2),mean=k=>a.reduce((n,x)=>n+x.p[k],0)/a.length;
