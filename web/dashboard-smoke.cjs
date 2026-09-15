@@ -56,6 +56,7 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
   ok(await page.locator('#bridge-circuit .gate').count()===6,'3PWM and 6PWM share the same six-switch physical bridge');
   ok(await page.locator('#gate-scope-rich').getAttribute('data-cursor-us')===await page.locator('#voltage-scope').getAttribute('data-cursor-us'),'gate and phase-voltage scopes share one selected PWM time');
   ok(await page.locator('#gate-scope-rich').getAttribute('data-series')==='6','6PWM signal scope exposes all six effective gate commands');
+  ok(await page.locator('#gate-scope-rich').getAttribute('data-layout')==='lanes','six gate commands are vertically separated instead of overplotted');
   ok(await page.evaluate(x=>JSON.stringify(labState.snapshot)===x,frozen),'diagram interface does not alter frozen joint physics');
   stage='stable pending status';
   const y0=await page.locator('#viewport').evaluate(e=>e.getBoundingClientRect().top+scrollY);
