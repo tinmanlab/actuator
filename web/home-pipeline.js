@@ -28,17 +28,17 @@ export function createLivePipeline(selectChart){
   const hasTick=s[1]>=0,active=r[11]===3,mode=s[18];
   const target=mode===0?[s[22],'A']:mode===1?[s[21],'N·m']:mode===2?[s[20],'rad/s']:[s[19],'rad'];
   $('pipeline-time').textContent=hasTick?`Joint ${f(r[0],3)} s · last control tick ${f(s[1]*1000,2)} ms`:'No control tick yet';
-  $('pipe-command').textContent=hasTick?`${f(target[0])} ${target[1]}`:'Await first tick';$('pipe-mode').textContent=modes[mode]+' command';
-  $('pipe-foc').textContent=active?`${f(s[3])} A`:'Loop inactive';
+  $('pipe-command').textContent=hasTick?`${f(target[0])} ${target[1]}`:'Await first tick';$('pipe-mode').textContent=hasTick?modes[mode]+' command':'Await applied command';
+  $('pipe-foc').textContent=active?`Iq ${f(s[3])} A`:'Loop inactive';
   $('pipe-bridge').textContent=`${f(r[7],0)} V ${r[13]?'ON':'OFF'}`;$('pipe-gates').textContent=r[13]?'3 duty ratios · averaged':'Gates inhibited · stored energy remains';
   $('pipe-motion').textContent=`${f(r[1],3)} rad`;$('pipe-torque').textContent=`${f(r[6])} N·m · ${f(r[2]*60/(2*Math.PI),1)} RPM`;
-  $('pipe-sensor').textContent=hasTick?`${f(s[8])} A`:'Await sample';$('pipe-age').textContent=`Age at control tick ${f(s[6]*1e6,0)} μs · ↺ 02`;
+  $('pipe-sensor').textContent=hasTick?`ia ${f(s[8])} A`:'Await sample';$('pipe-age').textContent=`Age at control tick ${f(s[6]*1e6,0)} μs · ↺ 02`;
   const expected=[requested.mode,requested.position,requested.velocity,requested.torque,requested.current,requested.kp,requested.kd];
   // Applied-command fields are captured with Drive::tick, never inferred from the editor.
   const pending=hasTick&&expected.some((v,k)=>Math.abs(v-s[18+k])>1e-5);
   $('pipeline-pending').hidden=!pending;
   const details={
-   command:`${modes[mode]} · torque request ${f(r[21])} N·m → Iq* ${f(r[5])} A${mode===0?' (direct current command)': ''}`,
+   command:mode===0?`Current command ${f(s[22])} A → limited Iq* ${f(r[5])} A · outer torque loop bypassed`:`${modes[mode]} · torque request ${f(r[21])} N·m → Iq* ${f(r[5])} A`,
    foc:active?`${s[25]?'Predictive':'PI FOC'} · Id* / Iq* ${f(s[26])} / ${f(r[5])} A · observed ${f(s[2])} / ${f(s[3])} A · Vd / Vq ${f(s[4])} / ${f(s[5])} V`:'Current regulation inactive: the displayed voltage command is not an energized bridge.',
    bridge:`Duty A / B / C ${r.slice(14,17).map(v=>f(v*100,1)+'%').join(' / ')} · gates ${r[13]?'ON':'OFF'} · ${r[22]?'voltage limited':'not voltage limited'}`,
    motion:`Output ${f(r[1],3)} rad · speed ${f(r[2],2)} rad/s · gear torque ${f(r[6])} N·m · load / stop ${f(r[19])} / ${f(r[20])} N·m`,

@@ -27,6 +27,11 @@ class Home(unittest.TestCase):
   self.assertIn('Recorded',self.text)
   self.assertIn('Averaged inverter',self.text)
   self.assertNotIn('<iframe',self.text)
+ def test_axis_labels_are_not_ambiguous(self):
+  code=(ROOT/'web/home-pipeline.js').read_text()
+  self.assertIn('Iq ${f(s[3])} A',code)
+  self.assertIn('ia ${f(s[8])} A',code)
+  self.assertIn('outer torque loop bypassed',code)
  def test_unique_ids_and_zero_default_feedforward(self):
   ids=[a['id'] for _,a in self.doc.tags if 'id' in a]
   self.assertEqual(len(ids),len(set(ids)))
