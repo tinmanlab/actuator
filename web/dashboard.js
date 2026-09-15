@@ -1,3 +1,4 @@
+import {createPwmInspector} from './pwm-inspector.js';
 /* Observations and diagrams only; numerical power/PWM and dyno data come from C++.
    A frozen-duty PWM reconstruction is explicitly not a switched live plant. */
 export function createDashboard(){
@@ -30,28 +31,10 @@ export function createDashboard(){
   if(state.history.length&&rows[0][0]<=state.history.at(-1).r[0])state.history=[];
   if(packet.wave)state.wave=packet.wave;
   rows.forEach((r,k)=>{const s=sig[k],p=powers[k];if(s&&p&&r[0]===s[0]&&r[0]===p[0])state.history.push({r,s,p});});
+  const last=state.history.at(-1);if(last)inspector.receive(packet.wave,last.r,last.s,packet.type);
   if(state.history.length>8000)state.history.splice(0,state.history.length-8000);
  }
- const svgNS='http://www.w3.org/2000/svg';
- function element(tag,attrs,text){const e=document.createElementNS(svgNS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text)e.textContent=text;return e;}
- const circuit=$('bridge-circuit');
- for(let phase=0;phase<3;phase++){
-  const x=52+phase*78;
-  circuit.append(element('path',{d:`M${x} 13V119 M${x} 67h27`,fill:'none',stroke:colors[phase]}));
-  for(let side=0;side<2;side++){const y=side?84:27,id=2*phase+side;circuit.append(element('rect',{id:'circuit-gate-'+id,x:x-20,y,width:40,height:24,rx:3,class:'gate'}),element('text',{x,y:y+16,'text-anchor':'middle',fill:'#d3e7ed'},'ABC'[phase]+(side?'L':'H')));}
-  circuit.append(element('text',{x:x+29,y:71,fill:colors[phase]},'UVW'[phase]));
- }
- function gates(){
-  if(!state.wave||!state.wave.rows.length)return;
-  const requested=+$('pwm-phase').value*1e-6,rows=state.wave.rows;
-  let sample=rows[0];for(const a of rows){if(a[0]>requested)break;sample=a;}
-  for(let k=0;k<6;k++)$('circuit-gate-'+k).classList.toggle('on',!!sample[4+k]);
-  $('pwm-time').textContent=format(sample[0]*1e6,2)+' μs';
-  const mode=$('pwm-interface').value==='3';
-  $('pwm-owner').textContent=mode?'3PWM requests A/B/C → driver adds complementary gates and 150 ns dead time.':'6PWM: timer supplies AH/AL (shown), BH/BL, CH/CL with 150 ns dead time.';
-  const cols=mode?[1,2,3]:[4,5,10];plot('gate-scope',cols.map(c=>({step:true,points:rows.map(a=>[a[0]*1e6,a[c]])})),'Logic 0/1'+(mode?' · A/B/C':' · AH/AL/carrier'),{range:[0,50],yrange:[-.1,1.1],xunit:'μs'});
-  circuit.dataset.time=state.wave.time;circuit.dataset.reconstructed='true';
- }
+ const inspector=createPwmInspector(plot);
  function energy(history){
   const end=history.at(-1).r[0],a=history.filter(x=>x.r[0]>=end-.2),mean=k=>a.reduce((n,x)=>n+x.p[k],0)/a.length;
   const pin=mean(1),pout=mean(7),storage=mean(10),fault=a.some(x=>x.r[12]);
@@ -89,14 +72,19 @@ export function createDashboard(){
   plot('duty-scope',[14,15,16].map(k=>({...line('r',k),step:true})),'Duty',{range,yrange:[0,1],xunit:'ms'});
   plot('sensor-scope',[line('s',11),line('s',17),{...line('s',8),step:true}],'Current [A]',{range,xunit:'ms'});
   plot('temperature-scope',[{points:state.history.map(x=>[x.r[0],x.r[9]])},{points:state.history.map(x=>[x.r[0],x.p[12]])},{points:state.history.map(x=>[x.r[0],x.r[10]])}],'Temperature [°C]');
-  if(!state.map){plot('tn-scope',[{points:state.history.map(x=>[x.r[24]*60/(2*Math.PI),x.r[6]/6])}],'Gear-input torque [N·m]',{xunit:'motor RPM'});plot('eta-scope',[],'Independent dyno η [%]');}else mapPlots();
+  if(!state.map){plot('tn-scope',[{points:state.history.map(x=>[x.r[24]*60/(2*Math.PI),x.r[6]/6])}],'Gear-input torque [N·m]',{xunit:'RPM'});plot('eta-scope',[],'Independent dyno η [%]');}else mapPlots();
   $('dc-voltage').textContent=format(r[7],1)+' V';$('dc-current').textContent=format(p[9],3)+' A';
-  const duty=r.slice(14,17),mean=duty.reduce((a,b)=>a+b,0)/3;
-  const alpha=(duty[0]-mean)*r[7],beta=(duty[0]+2*duty[1]-3*mean)*r[7]/Math.sqrt(3),scale=44/(r[7]*2/3||1);
-  $('duty-vector').setAttribute('d',`M60 52L${60+alpha*scale} ${52-beta*scale}`);
-  energy(state.history);gates();state.time=r[0];
+  $('diagram-reference').textContent=`Id* ${format(s[26])} / Iq* ${format(r[5])} A`;
+  $('diagram-adc').textContent=`Raw ia ${format(s[8])} A · age ${format(s[6]*1e6,0)} μs`;
+  $('diagram-dq').textContent=`Id ${format(s[2])} / Iq ${format(s[3])} A`;
+  $('diagram-error').textContent=`ed ${format(s[26]-s[2])} / eq ${format(r[5]-s[3])} A`;
+  $('diagram-regulator').textContent=s[25]?'Predictive + correction':'PI + feed-forward';
+  $('diagram-voltage').textContent=`Vd ${format(s[4])} / Vq ${format(s[5])} V`;
+  $('diagram-duty').textContent=r.slice(14,17).map(v=>format(v*100,1)+'%').join(' / ');
+  $('foc-diagram').dataset.time=r[0];
+  energy(state.history);state.time=r[0];
  }
- $('pwm-phase').oninput=gates;$('pwm-interface').onchange=gates;$('scope-window').onchange=()=>update(true);
- window.addEventListener('resize',()=>{clearTimeout(state.resize);state.resize=setTimeout(()=>update(true),150);});
+ $('scope-window').onchange=()=>update(true);
+ window.addEventListener('resize',()=>{clearTimeout(state.resize);state.resize=setTimeout(()=>{update(true);inspector.refresh();},150);});
  return {ingest,update};
 }

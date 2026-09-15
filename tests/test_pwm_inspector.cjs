@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');const path=require('node:path');
+(async()=>{
+ const root=path.join(__dirname,'..');
+ const html=fs.readFileSync(path.join(root,'web/index.html'),'utf8');
+ assert.ok(html.includes('id="pwm-play"'),'PWM cycle needs an actual play/pause control');
+ assert.ok(html.includes('id="pwm-next"'),'PWM edges need a step control');
+ assert.ok(html.includes('id="pwm-dialog"'),'Circuit needs a keyboard-accessible enlarged view');
+ const code=fs.readFileSync(path.join(root,'web/pwm-state.js'),'utf8');
+ const {decodeBridge,selectSample,edgeTimes,advanceCursor}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+ const row=(t,bits)=>[t,0,0,0,...bits,0];
+ const active=row(0,[1,0,0,1,0,1]);
+ let s=decodeBridge(active,[2,-1,-1],48);
+ assert.equal(s.label,'100');assert.equal(s.kind,'active');assert.ok(Math.abs(s.alpha-32)<1e-10);assert.ok(Math.abs(s.beta)<1e-10);
+ assert.deepEqual(s.paths,['high','low','low']);
+ s=decodeBridge(row(0,[1,0,1,0,1,0]),[2,-1,-1],48);assert.equal(s.kind,'zero');assert.equal(s.alpha,0);assert.equal(s.beta,0);
+ s=decodeBridge(row(0,[0,1,0,1,0,1]),[2,-1,-1],48);assert.equal(s.kind,'zero');
+ s=decodeBridge(row(0,[0,0,0,1,0,1]),[2,-1,-1],48);assert.equal(s.kind,'deadtime');assert.equal(s.paths[0],'low-diode');assert.equal(s.alpha,null);
+ s=decodeBridge(row(0,[0,0,0,0,0,0]),[-2,1,1],48,false);assert.equal(s.kind,'off');assert.equal(s.paths[0],'high-diode');
+ s=decodeBridge(active,[0,0,0],48);assert.deepEqual(s.paths,['none','none','none']);
+ s=decodeBridge(row(0,[1,1,0,1,0,1]),[1,0,-1],48);assert.equal(s.kind,'invalid');assert.deepEqual(s.paths,['none','none','none']);
+ const rows=[row(0,[1,0,1,0,1,0]),row(5e-6,[1,0,1,0,1,0]),row(10e-6,[1,0,0,0,1,0]),row(10.15e-6,[1,0,0,1,1,0]),row(25e-6,[0,1,0,1,0,1])];
+ assert.equal(selectSample(rows,9e-6),rows[1]);assert.equal(selectSample(rows,10e-6),rows[2]);
+ assert.deepEqual(edgeTimes(rows),[0,10e-6,10.15e-6,25e-6]);
+ assert.equal(advanceCursor(0,1500,3000).phase,25e-6);assert.equal(advanceCursor(40e-6,1200,3000).wrapped,true);
+ assert.equal(advanceCursor(10e-6,0,3000).phase,10e-6);
+ console.log('PWM UI controls, active/zero/dead-time/off vectors, diode direction, edge selection and playback clock PASS');
+})().catch(e=>{console.error(e);process.exit(1);});
