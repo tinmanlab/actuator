@@ -2,7 +2,7 @@
    A frozen-duty PWM reconstruction is explicitly not a switched live plant. */
 export function createDashboard(){
  const $=id=>document.getElementById(id), colors=['#5ce4bb','#ffc971','#6aaeff','#dd90c5'];
- const state={history:[],wave:null,map:null,mapBusy:false,drawnAt:0,pwmPlaying:true,pwmTimer:null,flowPhase:0,flowTimer:null};window.dashboardState=state;
+ const state={history:[],wave:null,map:null,mapBusy:false,drawnAt:0,pwmPlaying:true,pwmTimer:null,pwmPhaseUs:12.5,flowPhase:0,flowTimer:null};window.dashboardState=state;
  const format=(v,n=2)=>Number.isFinite(v)?v.toFixed(n):'—';
  function plot(id,series,unit,{range=null,yrange=null,dots=false,xunit='s'}={}){
   const canvas=$(id);if(!canvas)return;const rect=canvas.getBoundingClientRect();if(rect.width<1)return;
@@ -64,19 +64,23 @@ export function createDashboard(){
  function setPwmPlaying(value){
   state.pwmPlaying=!!value;
   const button=$('pwm-replay');if(button){button.textContent=state.pwmPlaying?'Pause PWM replay':'Play PWM replay';button.setAttribute('aria-pressed',String(state.pwmPlaying));}
-  const status=$('pwm-replay-status');if(status)status.textContent=state.pwmPlaying?'Auto replaying one reconstructed 50 μs period':'Paused for manual inspection';
+  const status=$('pwm-replay-status');if(status)status.textContent=state.pwmPlaying?'Stepping through native gate-change events in one reconstructed 50 μs period':'Paused for manual inspection';
  }
- function gates(){
-  if(!state.wave||!state.wave.rows.length)return;
-  const requested=+$('pwm-phase').value*1e-6,rows=state.wave.rows;
-  let sample=rows[0];for(const a of rows){if(a[0]>requested)break;sample=a;}
+ function renderGateSample(sample,rows){
+  state.pwmPhaseUs=sample[0]*1e6;
   for(let k=0;k<6;k++)$('circuit-gate-'+k).classList.toggle('on',!!sample[4+k]);
-  $('pwm-time').textContent=format(sample[0]*1e6,2)+' μs';
+  $('pwm-time').textContent=format(state.pwmPhaseUs,2)+' μs';
   const mode=$('pwm-interface').value==='3';
   $('pwm-owner').textContent=mode?'3PWM requests A/B/C → driver adds complementary gates and 150 ns dead time.':'6PWM: timer supplies AH/AL (shown), BH/BL, CH/CL with 150 ns dead time.';
   const cols=mode?[1,2,3]:[4,5,10];plot('gate-scope',cols.map(c=>({step:true,points:rows.map(a=>[a[0]*1e6,a[c]])})),'Logic 0/1'+(mode?' · A/B/C':' · AH/AL/carrier'),{range:[0,50],yrange:[-.1,1.1],xunit:'μs'});
-  drawGateCursor(sample[0]*1e6);
-  circuit.dataset.time=state.wave.time;circuit.dataset.reconstructed='true';circuit.dataset.sampleUs=(sample[0]*1e6).toFixed(3);
+  drawGateCursor(state.pwmPhaseUs);
+  circuit.dataset.time=state.wave.time;circuit.dataset.reconstructed='true';circuit.dataset.sampleUs=state.pwmPhaseUs.toFixed(4);
+ }
+ function gates(requestedUs=state.pwmPhaseUs){
+  if(!state.wave||!state.wave.rows.length)return;
+  const rows=state.wave.rows,phaseUs=Number.isFinite(requestedUs)?requestedUs:Number($('pwm-phase').value),requested=phaseUs*1e-6;
+  let sample=rows[0];for(const a of rows){if(a[0]>requested)break;sample=a;}
+  renderGateSample(sample,rows);
  }
  const phaseCursor=document.querySelector('.phase-cursor');
  if(phaseCursor){
@@ -86,10 +90,17 @@ export function createDashboard(){
   controls.append(replay,replayStatus);phaseCursor.insertAdjacentElement('afterend',controls);
   replay.onclick=()=>setPwmPlaying(!state.pwmPlaying);
   setPwmPlaying(true);
+  const gateSignature=row=>row.slice(4,10).map(v=>v?'1':'0').join('');
   state.pwmTimer=setInterval(()=>{
    if(!state.pwmPlaying||document.hidden||!state.wave?.rows?.length)return;
-   const slider=$('pwm-phase'),next=(Number(slider.value)+1.25)%50;slider.value=next.toFixed(3);gates();
-  },60);
+   const slider=$('pwm-phase'),rows=state.wave.rows,current=state.pwmPhaseUs*1e-6;
+   let sample=rows[0];for(const row of rows){if(row[0]>current+1e-15)break;sample=row;}
+   const signature=gateSignature(sample);
+   let next=rows.find(row=>row[0]>current+1e-12&&gateSignature(row)!==signature);
+   if(!next)next=rows.find(row=>gateSignature(row)!==signature);
+   if(next){slider.value=String(Math.min(49.999,next[0]*1e6));renderGateSample(next,rows);}
+   else{const nextUs=(state.pwmPhaseUs+1.25)%50;slider.value=String(nextUs);gates(nextUs);}
+  },220);
  }
  function energy(history){
   const end=history.at(-1).r[0],a=history.filter(x=>x.r[0]>=end-.2),mean=k=>a.reduce((n,x)=>n+x.p[k],0)/a.length;
@@ -135,7 +146,7 @@ export function createDashboard(){
   $('duty-vector').setAttribute('d',`M60 52L${60+alpha*scale} ${52-beta*scale}`);
   energy(state.history);gates();state.time=r[0];
  }
- $('pwm-phase').oninput=()=>{setPwmPlaying(false);gates();};$('pwm-interface').onchange=gates;$('scope-window').onchange=()=>update(true);
+ $('pwm-phase').oninput=()=>{state.pwmPhaseUs=Number($('pwm-phase').value);setPwmPlaying(false);gates(state.pwmPhaseUs);};$('pwm-interface').onchange=()=>gates(state.pwmPhaseUs);$('scope-window').onchange=()=>update(true);
  window.addEventListener('resize',()=>{clearTimeout(state.resize);state.resize=setTimeout(()=>update(true),150);});
  return {ingest,update};
 }
