@@ -2,7 +2,7 @@
    A frozen-duty PWM reconstruction is explicitly not a switched live plant. */
 export function createDashboard(){
  const $=id=>document.getElementById(id), colors=['#5ce4bb','#ffc971','#6aaeff','#dd90c5'];
- const state={history:[],wave:null,map:null,mapBusy:false,drawnAt:0};window.dashboardState=state;
+ const state={history:[],wave:null,map:null,mapBusy:false,drawnAt:0,pwmPlaying:true,pwmTimer:null,flowPhase:0,flowTimer:null};window.dashboardState=state;
  const format=(v,n=2)=>Number.isFinite(v)?v.toFixed(n):'—';
  function plot(id,series,unit,{range=null,yrange=null,dots=false,xunit='s'}={}){
   const canvas=$(id);if(!canvas)return;const rect=canvas.getBoundingClientRect();if(rect.width<1)return;
@@ -35,11 +35,36 @@ export function createDashboard(){
  const svgNS='http://www.w3.org/2000/svg';
  function element(tag,attrs,text){const e=document.createElementNS(svgNS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text)e.textContent=text;return e;}
  const circuit=$('bridge-circuit');
+ const focDiagram=$('foc-diagram');
+ if(focDiagram){
+  const pulse=element('circle',{id:'foc-flow-pulse',cx:12,cy:35,r:4,class:'flow-pulse'});
+  const returnPath=element('path',{id:'foc-feedback-path',d:'M610 61H18',class:'feedback-path',fill:'none'});
+  const feedbackPulse=element('circle',{id:'foc-feedback-pulse',cx:610,cy:61,r:3,class:'flow-pulse feedback-pulse'});
+  focDiagram.append(returnPath,pulse,feedbackPulse);
+  state.flowTimer=setInterval(()=>{
+   if(document.hidden||!window.labState?.running)return;
+   state.flowPhase=(state.flowPhase+.045)%1;
+   pulse.setAttribute('cx',12+598*state.flowPhase);
+   feedbackPulse.setAttribute('cx',610-592*state.flowPhase);
+   focDiagram.dataset.flowPhase=state.flowPhase.toFixed(3);
+  },80);
+ }
  for(let phase=0;phase<3;phase++){
   const x=52+phase*78;
   circuit.append(element('path',{d:`M${x} 13V119 M${x} 67h27`,fill:'none',stroke:colors[phase]}));
   for(let side=0;side<2;side++){const y=side?84:27,id=2*phase+side;circuit.append(element('rect',{id:'circuit-gate-'+id,x:x-20,y,width:40,height:24,rx:3,class:'gate'}),element('text',{x,y:y+16,'text-anchor':'middle',fill:'#d3e7ed'},'ABC'[phase]+(side?'L':'H')));}
   circuit.append(element('text',{x:x+29,y:71,fill:colors[phase]},'UVW'[phase]));
+ }
+ function drawGateCursor(us){
+  const canvas=$('gate-scope'),rect=canvas.getBoundingClientRect();if(rect.width<1||!Number.isFinite(us))return;
+  const dpr=canvas.width/rect.width||1,ctx=canvas.getContext('2d'),l=38,r=12,x=l+Math.max(0,Math.min(1,us/50))*(rect.width-l-r);
+  ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.strokeStyle='#f5fbff';ctx.lineWidth=1;ctx.setLineDash([3,2]);ctx.beginPath();ctx.moveTo(x,18);ctx.lineTo(x,rect.height-23);ctx.stroke();ctx.restore();
+  canvas.dataset.cursorUs=us.toFixed(3);
+ }
+ function setPwmPlaying(value){
+  state.pwmPlaying=!!value;
+  const button=$('pwm-replay');if(button){button.textContent=state.pwmPlaying?'Pause PWM replay':'Play PWM replay';button.setAttribute('aria-pressed',String(state.pwmPlaying));}
+  const status=$('pwm-replay-status');if(status)status.textContent=state.pwmPlaying?'Auto replaying one reconstructed 50 μs period':'Paused for manual inspection';
  }
  function gates(){
   if(!state.wave||!state.wave.rows.length)return;
@@ -50,7 +75,21 @@ export function createDashboard(){
   const mode=$('pwm-interface').value==='3';
   $('pwm-owner').textContent=mode?'3PWM requests A/B/C → driver adds complementary gates and 150 ns dead time.':'6PWM: timer supplies AH/AL (shown), BH/BL, CH/CL with 150 ns dead time.';
   const cols=mode?[1,2,3]:[4,5,10];plot('gate-scope',cols.map(c=>({step:true,points:rows.map(a=>[a[0]*1e6,a[c]])})),'Logic 0/1'+(mode?' · A/B/C':' · AH/AL/carrier'),{range:[0,50],yrange:[-.1,1.1],xunit:'μs'});
-  circuit.dataset.time=state.wave.time;circuit.dataset.reconstructed='true';
+  drawGateCursor(sample[0]*1e6);
+  circuit.dataset.time=state.wave.time;circuit.dataset.reconstructed='true';circuit.dataset.sampleUs=(sample[0]*1e6).toFixed(3);
+ }
+ const phaseCursor=document.querySelector('.phase-cursor');
+ if(phaseCursor){
+  const controls=document.createElement('div');controls.className='pwm-replay-controls';
+  const replay=document.createElement('button');replay.type='button';replay.id='pwm-replay';replay.setAttribute('aria-pressed','true');
+  const replayStatus=document.createElement('small');replayStatus.id='pwm-replay-status';
+  controls.append(replay,replayStatus);phaseCursor.insertAdjacentElement('afterend',controls);
+  replay.onclick=()=>setPwmPlaying(!state.pwmPlaying);
+  setPwmPlaying(true);
+  state.pwmTimer=setInterval(()=>{
+   if(!state.pwmPlaying||document.hidden||!state.wave?.rows?.length)return;
+   const slider=$('pwm-phase'),next=(Number(slider.value)+1.25)%50;slider.value=next.toFixed(3);gates();
+  },60);
  }
  function energy(history){
   const end=history.at(-1).r[0],a=history.filter(x=>x.r[0]>=end-.2),mean=k=>a.reduce((n,x)=>n+x.p[k],0)/a.length;
@@ -96,7 +135,7 @@ export function createDashboard(){
   $('duty-vector').setAttribute('d',`M60 52L${60+alpha*scale} ${52-beta*scale}`);
   energy(state.history);gates();state.time=r[0];
  }
- $('pwm-phase').oninput=gates;$('pwm-interface').onchange=gates;$('scope-window').onchange=()=>update(true);
+ $('pwm-phase').oninput=()=>{setPwmPlaying(false);gates();};$('pwm-interface').onchange=gates;$('scope-window').onchange=()=>update(true);
  window.addEventListener('resize',()=>{clearTimeout(state.resize);state.resize=setTimeout(()=>update(true),150);});
  return {ingest,update};
 }
