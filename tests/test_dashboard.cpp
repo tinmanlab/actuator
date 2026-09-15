@@ -16,7 +16,9 @@ int main(){try{
   double t=n*1e-8;
   for(int k=0;k<3;k++)check(!(lab_pwm(t,3+2*k)&&lab_pwm(t,4+2*k)),"reconstructed shoot through");
  }
- check(std::isnan(lab_pwm(-1,0))&&std::isnan(lab_pwm(0,10)),"bad PWM reads");
+ for(int k=10;k<=15;k++)check(std::isfinite(lab_pwm(12.5e-6,k)),"missing reconstructed bridge voltage");
+ check(std::abs(lab_pwm(12.5e-6,13)+lab_pwm(12.5e-6,14)+lab_pwm(12.5e-6,15))<1e-8,"phase-neutral reconstruction violates KVL");
+ check(std::isnan(lab_pwm(-1,0))&&std::isnan(lab_pwm(0,16)),"bad PWM reads");
  check(q==lab_get(1)&&i==lab_get(4),"diagnostics mutate physics");
  lab_step(1000);double final=lab_get(1);
  lab_reset(0);lab_step(10000);lab_step(1000);check(final==lab_get(1),"diagnostics alter future trajectory");
