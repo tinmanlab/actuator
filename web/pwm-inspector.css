@@ -1,0 +1,51 @@
+/* Legible signal schematic and a read-only, explicitly slowed PWM microscope. */
+.instrument-dashboard .readable-loop{margin:10px 0 14px;padding:12px;border:1px solid #335365;border-radius:8px;background:#0e202c}
+.diagram-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;font-size:14px}
+.instrument-dashboard .diagram-heading button{font-size:12px}
+.instrument-dashboard #foc-diagram{display:block;height:auto;width:100%;margin:0;font:14px/1.5 var(--mono);color:#c9dee8}
+.diagram-reference{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;font-size:12px;margin:0 0 10px;color:#ffc971}
+.diagram-reference output{font-weight:700}.diagram-reference span{color:#aec6d5}
+.diagram-blocks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));list-style:none;gap:24px;padding:0;margin:0}
+.diagram-blocks li{position:relative;padding:12px;border:1px solid #446a7d;border-radius:6px;background:#142d3c;min-width:0}
+.diagram-blocks li:not(:last-child)::after{content:'→';position:absolute;left:calc(100% + 5px);top:40%;color:#5ce4bb;font-size:19px}
+.diagram-blocks strong{display:block;font:600 14px/1.4 system-ui,sans-serif;min-height:39px}
+.diagram-blocks li>span:not(.diagram-step){display:block;font:12px/1.5 system-ui,sans-serif;color:#afc9da;min-height:36px}
+.diagram-blocks .diagram-step{display:block;font-size:10px;margin-bottom:6px;color:#83d7e9}
+.diagram-blocks output{display:block;margin-top:6px;font:12px/1.6 var(--mono);color:#96efd5;overflow-wrap:anywhere}
+.feedback-return{margin-top:10px;border-bottom:1px dashed #65939e;border-left:1px dashed #65939e;border-radius:0 0 0 9px;padding:4px 12px 8px;font-size:12px;text-align:center}
+.feedback-return small{font:11px system-ui,sans-serif;display:block;color:#9db7c9;margin-top:3px}
+.pwm-toolbar,.pwm-options{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:9px 0}
+.instrument-dashboard .pwm-toolbar button,.instrument-dashboard #pwm-expand{font-size:12px;min-height:36px;padding:7px 9px}
+.instrument-dashboard #pwm-play[aria-pressed=true]{background:#174c43;border-color:#5ad6b5;color:#c9ffed}
+.pwm-options label{font:12px system-ui,sans-serif;color:#bbd4e2;display:flex;align-items:center;gap:5px}
+.pwm-options input{width:auto}.pwm-options select{font-size:12px;padding:4px}
+.pwm-status{font:11px/1.6 var(--mono);color:#aac4d2;min-height:36px;margin:6px 0;overflow-wrap:anywhere}
+#pwm-mode-status{color:#7ee1cc;min-height:18px}
+.pwm-diagrams{display:grid;grid-template-columns:1fr;gap:8px}
+.pwm-inspector #vector-diagram{display:block;width:100%;height:auto;aspect-ratio:340/222;max-height:245px;overflow:visible}
+.pwm-inspector .vector-label{fill:#bdd9e9;font:13px var(--mono)}
+.vector-legend{display:flex;justify-content:center;gap:14px;font:11px var(--mono);color:#5ce4bb}
+.vector-legend span:nth-child(2){color:#ffc971}
+#vector-state,#vector-mean{display:block;text-align:center;font:12px/1.5 var(--mono);margin:5px 0;min-height:18px}
+#vector-state{color:#ffe0a0}#vector-mean{color:#a7d7e5}
+.pwm-inspector #bridge-circuit{display:block;width:100%;height:auto;aspect-ratio:360/245;max-height:260px;font:14px var(--mono);color:#cbe4f0}
+.pwm-inspector #bridge-circuit .gate{fill:#112737;stroke:#587b90;stroke-width:1.5}
+.pwm-inspector #bridge-circuit .gate.on{fill:#17694f;stroke:#9bffe0;stroke-width:2}
+.phase-paths{display:flex;flex-direction:column;gap:3px;font:11px/1.5 var(--mono);min-height:58px}
+.phase-paths output:nth-child(1){color:#5ce4bb}.phase-paths output:nth-child(2){color:#ffc971}.phase-paths output:nth-child(3){color:#6aaeff}
+.gate-chart{position:relative}.pwm-inspector #gate-scope{height:115px}.gate-chart #gate-cursor{position:absolute;top:18px;bottom:23px;border-left:2px solid #fff;pointer-events:none}
+.pwm-inspector .phase-cursor{font-size:11px;min-height:40px;gap:8px}.pwm-inspector .phase-cursor output{min-width:82px;font-variant-numeric:tabular-nums}
+.dc-live{display:flex;align-items:baseline;justify-content:space-between;gap:8px;border-top:1px solid #355163;padding-top:8px;font:12px var(--mono);flex-wrap:wrap}
+.dc-live strong{font-size:17px}.dc-live output{color:#bddfed}
+.pwm-inspector .instrument-note{font-size:11px!important;line-height:1.6}
+.pwm-explainer{margin-top:10px}.pwm-explainer summary{font-size:12px}.pwm-explainer p{font-size:12px;line-height:1.7;color:#b6cbd8}
+.diagram-dialog{width:min(1080px,94vw);max-width:94vw;max-height:90vh;overflow:auto;box-sizing:border-box;background:#0a1c29;color:#dceef8;border:1px solid #66899a;border-radius:12px;padding:18px;box-shadow:0 15px 80px #000b}
+.diagram-dialog::backdrop{background:#020a12d9}.dialog-close{display:block;margin-left:auto;margin-bottom:12px;min-height:38px}
+.diagram-dialog #pwm-expand{display:none}.diagram-dialog .pwm-inspector{border:0;background:none;padding:0;overflow:visible}
+.diagram-dialog .pwm-diagrams{grid-template-columns:1fr 1fr;gap:26px}
+.diagram-dialog .pwm-inspector #vector-diagram,.diagram-dialog .pwm-inspector #bridge-circuit{max-height:310px}
+.diagram-dialog .pwm-inspector #gate-scope{height:130px}
+.diagram-dialog .pwm-toolbar button{font-size:14px}.diagram-dialog #pwm-source{min-height:18px}
+.diagram-dialog .pwm-inspector .instrument-note{font-size:12px!important}
+@media(max-width:1050px){.diagram-blocks{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.diagram-blocks li::after{display:none}.diagram-blocks strong{min-height:0}.diagram-blocks li>span:not(.diagram-step){min-height:0}}
+@media(max-width:620px){.diagram-blocks{grid-template-columns:1fr 1fr;gap:8px}.diagram-blocks li{padding:10px}.diagram-blocks li:last-child{grid-column:1/-1}.diagram-blocks strong{font-size:14px}.diagram-blocks output{font-size:12px}.diagram-heading{align-items:flex-start}.diagram-heading strong{font-size:13px}.diagram-dialog{padding:10px;width:96vw;max-width:96vw}.diagram-dialog .pwm-diagrams{grid-template-columns:1fr}.diagram-reference{justify-content:flex-start}.pwm-status{font-size:11px}.instrument-dashboard #foc-diagram{height:auto}}
