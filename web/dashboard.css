@@ -22,3 +22,11 @@ body.instrument-dashboard{--bg:#0a121b;--ink:#dfecf4;--paper:#0a121b;--white:#10
 @media(prefers-reduced-motion:reduce){.instrument-dashboard *{scroll-behavior:auto!important}}
 
 .stage-symbol{float:right;width:34px;height:34px;color:#6ebada;opacity:.8}.instrument-dashboard .pipeline-stages output{font-size:15px}@media(max-width:1000px){.stage-symbol{display:none}}
+
+/* Override the inherited light-theme compound selectors, not just bare inputs. */
+.instrument-dashboard .visual-panel{background:#102330;border-color:var(--line)}
+.instrument-dashboard .controls label{color:#c2d5e2}
+.instrument-dashboard .controls input[type=number],
+.instrument-dashboard .controls select{background:#132c3b;color:#dfecf4;border-color:#355165}
+.instrument-dashboard .controls input:disabled,
+.instrument-dashboard .controls select:disabled{color:#9aafbe;opacity:1}

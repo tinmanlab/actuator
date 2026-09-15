@@ -10,6 +10,18 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
  try{
   await page.goto(base,{waitUntil:'networkidle'});await page.waitForFunction(()=>window.dashboardState?.time>.8&&window.labState?.modelLoaded);
   ok(await page.locator('body').evaluate(e=>e.classList.contains('instrument-dashboard')),'main URL uses the approved dark instrument workspace');
+  // Guard against more-specific light-theme rules leaking into the dark editor.
+  const contrasts=await page.evaluate(()=>{
+   const rgb=s=>(s.match(/[\d.]+/g)||[]).map(Number);
+   const lum=v=>rgb(v).slice(0,3).map(x=>{x/=255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4;}).reduce((a,x,k)=>a+x*[.2126,.7152,.0722][k],0);
+   return ['#kp','#kd','#mode','.controls label','.visual-panel .model-note'].map(selector=>{
+    const el=document.querySelector(selector),foreground=getComputedStyle(el).color;let parent=el,bg;
+    do{bg=getComputedStyle(parent).backgroundColor;parent=parent.parentElement;}while(parent&&(rgb(bg)[3]??1)===0);
+    const a=lum(foreground),b=lum(bg);return {selector,foreground,background:bg,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+   });
+  });
+  fs.writeFileSync(out+'/dashboard-contrast.json',JSON.stringify(contrasts,null,2));
+  ok(contrasts.every(c=>c.ratio>=4.5),'command values, labels and model note have readable dark-theme contrast');
   ok(await page.evaluate(()=>dashboardState.history.length>=500&&dashboardState.history.every(x=>x.r[0]===x.s[0]&&x.r[0]===x.p[0])),'current and energy histories match the scene clock');
   for(const id of ['phase-scope','dq-scope','duty-scope','sensor-scope','temperature-scope','tn-scope'])ok(await page.locator('#'+id).evaluate(e=>+e.dataset.samples>5),id+' contains numerical samples');
   ok(await page.locator('#bridge-circuit .gate').count()===6,'three-phase bridge has six switch nodes');
@@ -41,9 +53,13 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
   ok(names.includes('dc_supply')&&names.includes('motor_terminal')&&names.includes('dc_return_3'),'scene includes DC supply and connected power harness');
   stage='visual review';
   for(const width of [1640,1440,768,390]){
-   await page.setViewportSize({width,height:1040});await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';scrollTo(0,0);});await page.waitForTimeout(400);
+   await page.setViewportSize({width,height:1040});
+   await page.evaluate(()=>{document.activeElement?.blur();document.documentElement.style.scrollBehavior='auto';window.scrollTo({top:0,behavior:'instant'});});
+   await page.waitForFunction(()=>window.scrollY===0&&Math.abs(document.querySelector('header').getBoundingClientRect().top)<1);
+   await page.waitForTimeout(400);
    ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'dashboard fits '+width+' px');
-   await page.screenshot({path:out+'/dashboard-'+width+'.png',fullPage:true});
+   await page.screenshot({path:out+'/dashboard-screen-'+width+'.png',fullPage:false,animations:'disabled'});
+   await page.screenshot({path:out+'/dashboard-'+width+'.png',fullPage:true,animations:'disabled'});
   }
   if(process.env.EXPECTED_SHA){const m=await(await page.request.get(new URL('build.json',base).href)).json();ok(m.source_commit===process.env.EXPECTED_SHA,'dashboard source matches deployed main');}
   ok(!errors.length&&!requests.length,'no script errors or missing assets');stage='complete';
