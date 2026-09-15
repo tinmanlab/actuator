@@ -40,7 +40,7 @@ function advance(){
 createQdd().then(m=>{
  core=m;reset();postMessage({type:'ready'});
  timer=setInterval(()=>{try{advance();}catch(e){running=false;postMessage({type:'error',message:e.message});}},20);
-}).catch(e=>postMessage({type:'error',message:`WebAssembly load failed: ${e.message}`));
+}).catch(e=>postMessage({type:'error',message:`WebAssembly load failed: ${e.message}`}));
 onmessage=({data:d})=>{
  if(!core){postMessage({type:'error',message:'The C++ engine is not ready yet.'});return;}
  try{
