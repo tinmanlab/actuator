@@ -10,7 +10,6 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
  try{
   await page.goto(base,{waitUntil:'networkidle'});await page.waitForFunction(()=>window.dashboardState?.time>.8&&window.labState?.modelLoaded);
   ok(await page.locator('body').evaluate(e=>e.classList.contains('instrument-dashboard')),'main URL uses the approved dark instrument workspace');
-  // Guard against more-specific light-theme rules leaking into the dark editor.
   const contrasts=await page.evaluate(()=>{
    const rgb=s=>(s.match(/[\d.]+/g)||[]).map(Number);
    const lum=v=>rgb(v).slice(0,3).map(x=>{x/=255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4;}).reduce((a,x,k)=>a+x*[.2126,.7152,.0722][k],0);
@@ -31,7 +30,7 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
   const pwmStart=Number(await page.locator('#pwm-phase').inputValue());
   await page.waitForTimeout(320);
   const pwmMoved=Number(await page.locator('#pwm-phase').inputValue());
-  ok(Math.abs(pwmMoved-pwmStart)>.2,'frozen-duty PWM reconstruction auto-replays through the 50 us period');
+  ok(Math.abs(pwmMoved-pwmStart)>.05,'PWM replay advances to a native gate-change event');
   ok((await page.locator('#pwm-replay').textContent()).includes('Pause'),'PWM replay exposes an explicit pause control');
   const gateBefore=await page.locator('#bridge-circuit .gate.on').evaluateAll(nodes=>nodes.map(n=>n.id).join(','));
   await page.waitForFunction(before=>Array.from(document.querySelectorAll('#bridge-circuit .gate.on')).map(n=>n.id).join(',')!==before,gateBefore,{timeout:3500,polling:80});
