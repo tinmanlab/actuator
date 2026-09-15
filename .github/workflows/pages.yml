@@ -1,7 +1,7 @@
 name: Browser lab and Pages
 on:
   push:
-    branches: [main, feat/browser-lab, feat/contact-guides, feat/signals-and-fidelity, feat/interactive-powertrain, feat/home-live-pipeline, feat/visual-dashboard, fix/pwm-replay-flow]
+    branches: [main, feat/browser-lab, feat/contact-guides, feat/signals-and-fidelity, feat/interactive-powertrain, feat/home-live-pipeline, feat/visual-dashboard, fix/pwm-replay-flow, fix/pwm-event-replay]
   workflow_dispatch:
 permissions:
   contents: read
