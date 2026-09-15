@@ -79,3 +79,29 @@ class ModelContracts(unittest.TestCase):
         self.assertTrue(all(n==2 for n in edges.values()),'closed manifold ring, not painted hole')
 
 if __name__=='__main__':unittest.main()
+
+class HarnessContracts(unittest.TestCase):
+ def test_power_source_and_closed_paths(self):
+  root=ET.parse(ROOT/'examples/mujoco/bench.xml').getroot()
+  for name in ('dc_supply','supply_terminal','motor_terminal','phase_connector','signal_connector'):
+   self.assertIsNotNone(root.find(f".//geom[@name='{name}']"),name)
+  # Centerlines, including cable radius, may not cross the column, base or PCB.
+  world=root.find('worldbody')
+  for prefix in ('phase_u_','phase_v_','phase_w_','encoder_cable_','dc_positive_','dc_return_'):
+   cables=[g for g in world.findall('geom') if g.get('name','').startswith(prefix)]
+   self.assertGreater(len(cables),1,prefix)
+   last=None
+   for g in cables:
+    pt=list(map(float,g.get('fromto').split()));a,b=pt[:3],pt[3:];radius=float(g.get('size'))
+    if last is not None:self.assertEqual(a,last,prefix+' broken cable')
+    last=b
+    for name in ('mount_column','mount_foot','workbench','pcb','dc_supply'):
+     box=world.find(f"geom[@name='{name}']")
+     pos=list(map(float,box.get('pos').split()));half=list(map(float,box.get('size').split()))
+     for t in [i/100 for i in range(101)]:
+      p=[u+(v-u)*t for u,v in zip(a,b)]
+      inside=all(abs(p[k]-pos[k])<half[k]+radius-1e-5 for k in range(3))
+      self.assertFalse(inside,(g.get('name'),name,p))
+    for t in [i/100 for i in range(101)]:
+     p=[u+(v-u)*t for u,v in zip(a,b)];rad=math.hypot(p[0],p[2]-.6)
+     self.assertFalse(.072-radius<p[1]<.084+radius and .055-radius<rad<.085+radius,(g.get('name'),'mount bore'))

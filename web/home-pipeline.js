@@ -3,7 +3,7 @@ export function createLivePipeline(selectChart){
  const $=id=>document.getElementById(id),keys=['command','foc','bridge','motion','sensor'];
  const buttons=Array.from(document.querySelectorAll('[data-live-stage]'));
  const f=(v,n=2)=>Number(v).toFixed(n),modes=['Current','Torque','Velocity','Position','Impedance'];
- let selected='command',latest=null;
+ let selected='command',latest=null,pendingSince=null;
  const content={
   command:['01 / Set the command','The active mode converts its command and feedback into a torque or current request. Only the command panel changes this joint.','control.html#pipeline'],
   foc:['02 / Close the current loop','Clarke / Park transforms offset-corrected, held ADC samples into dq. The current controller regulates Id / Iq and produces voltage-limited Vd / Vq at 20 kHz.','control.html#foc'],
@@ -35,8 +35,13 @@ export function createLivePipeline(selectChart){
   $('pipe-sensor').textContent=hasTick?`ia ${f(s[8])} A`:'Await sample';$('pipe-age').textContent=`Age at control tick ${f(s[6]*1e6,0)} μs · ↺ 02`;
   const expected=[requested.mode,requested.position,requested.velocity,requested.torque,requested.current,requested.kp,requested.kd];
   // Applied-command fields are captured with Drive::tick, never inferred from the editor.
-  const pending=hasTick&&expected.some((v,k)=>Math.abs(v-s[18+k])>1e-5);
-  $('pipeline-pending').hidden=!pending;
+  const pending=hasTick&&expected.some((v,k)=>Math.abs(Math.fround(v)-s[18+k])>1e-6);
+  if(pending){if(pendingSince===null)pendingSince=performance.now();}else pendingSince=null;
+  const showPending=pending&&(!requested.running||performance.now()-pendingSince>250);
+  $('pipeline-pending').hidden=!showPending;
+  $('pipeline-pending').textContent=requested.running?'● Applying command…':'● Pending · Step / Resume';
+  $('synced-chip').style.visibility=showPending?'hidden':'visible';
+  $('synced-chip').textContent=requested.running?'● Live command stream':'● Commands applied';
   const details={
    command:mode===0?`Current command ${f(s[22])} A → limited Iq* ${f(r[5])} A · outer torque loop bypassed`:`${modes[mode]} · torque request ${f(r[21])} N·m → Iq* ${f(r[5])} A`,
    foc:active?`${s[25]?'Predictive':'PI FOC'} · Id* / Iq* ${f(s[26])} / ${f(r[5])} A · observed ${f(s[2])} / ${f(s[3])} A · Vd / Vq ${f(s[4])} / ${f(s[5])} V`:'Current regulation inactive: the displayed voltage command is not an energized bridge.',

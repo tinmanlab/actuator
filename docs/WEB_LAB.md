@@ -34,7 +34,7 @@ python -m http.server 8765 --directory _site
 # Another terminal:
 cd web && npx playwright install chromium
 LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs
-node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs
+node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs && node dashboard-smoke.cjs
 ```
 
 `tools/build_site.py` reuses the reviewed MJCF/OBJ recipe, exporting a compact scene representation for Three.js. Visual meshes never become a second source of mechanical mass. Camera controls and cutaway visibility do not change physics. No vendor CAD fidelity is implied.
@@ -97,7 +97,8 @@ torque/efficiency qualification, temperature changes, event loops and the GIF.
 The entry page is a single live joint, not a dashboard of independent solvers.
 Five ordered, keyboard-operable stage buttons share one explanation region.
 Selecting a stage is read-only; it only selects an existing result chart.
-There is one scenario picker, one command editor per field and one result chart.
+There is one scenario picker, one command editor per field and one selectable
+joint-response chart. Additional current/duty/power scopes share the same run.
 Inactive inputs are hidden; applicable feed-forward controls remain available
 under Advanced, with a nonzero indicator. HTML and runtime command defaults are now consistently zero for velocity and
 torque feed-forward. The previous HTML said 2 rad/s and 1 N·m, but the existing
@@ -112,7 +113,8 @@ are explicitly separated below the live bench. Recordings are collapsed on entry
 `lab_signal(int field)` is an additive **read-only** browser adapter accessor.
 The existing 11-command, 31-field `lab_get` ABI and CSV are unchanged. The Worker
 sends a latest `signal` sidecar with the same timestamp as the last scene row in
-each packet. These are latest-state diagnostics, not a second 1 kHz history.
+each packet. Aligned histories for the instrument scopes use the same sidecar
+values; no separate simulation state is created.
 The UI rejects mismatched timestamps rather than combining different runs.
 Before any control tick, field 1 is -1. Before initialization or for an invalid
 field, the accessor returns NaN. Reads never advance time, RNG, filtering or control.
@@ -135,7 +137,8 @@ The plant endpoint is 50 μs after the displayed controller tick. Held ADC sampl
 are older again; the UI labels those times separately. A command edited while
 paused is pending, not retroactively applied to the displayed tick. Only Armed
 state is described as active current regulation; gate-off does not imply zero
-physical current. No logical gate waveform is invented for the averaged bridge.
+physical current. Frozen-duty gate reconstruction is labeled separately from
+the averaged integration, as specified below.
 The speed chart is plant speed only; position/torque references are hidden when
 not applicable to the selected control mode.
 
@@ -144,3 +147,68 @@ stage selection, pending commands, mode-specific inputs, fault/reset behavior,
 collapsed media and responsive layouts on the built site and public Pages URL.
 `live_readonly_signal_contract` verifies observational purity and unchanged native
 trajectories; `homepage_pipeline_contract` guards ordering and zero feed-forward.
+
+## Instrument dashboard (same-run observations, no raster concept overlay)
+
+The main HTML uses a scoped dark instrument layout: phase/dq/duty histories,
+3D hardware, PWM logic reconstruction, analog/ADC feedback, live temperature,
+losses and an optional inline reference dyno. `dashboard.js` only plots native
+observations. The existing 31-field CSV and 28-field signal API remain unchanged;
+the Worker additionally sends their aligned 1 kHz sidecar histories, bounded to
+8,000 rows. Rendering is capped near 10 Hz; the solver still uses its original
+integration and control rates. Plotting or inspecting never advances the plant.
+
+The pending-command problem was a flow-level paragraph repeatedly toggled by a
+comparison between edited inputs and the previous tick's command. A reserved,
+absolute-position status slot now prevents movement. Float command comparisons
+use the MCU float representation. Sub-250 ms pending states while running are
+not flashed as warnings; paused edits remain explicitly pending until Step or
+Resume. The always-present chip describes the live command stream. Alert overlays
+inside the viewport also preserve page geometry. No safety fault is hidden.
+
+`lab_power(k)` is additive, read-only. Fields 1–11 are time means over the most
+recent successful `lab_step(n)` call (one millisecond in browser telemetry).
+0: endpoint seconds; 1: inverter DC input W; 2: motor terminal AC W; 3: inverter
+conduction/dead-time proxy W; 4: copper W; 5: rotor+output friction W; 6: gear
+relative-motion dissipation W; 7: external load work rate W; 8: stop work rate W;
+9: inverter DC current A; 10: electrical+kinetic+elastic stored-energy rate W;
+11: remaining power-balance residual W; 12: endpoint case °C; 13: phase resistance Ω;
+14: stored energy J; 15: brake resistor W. Copper uses the bridge evaluation current
+and resistance at the step start; mechanical work uses endpoint-average velocity.
+These are diagnostics of the existing integration, not an exact energy-conserving
+solver. The residual is displayed and must not be relabeled as dissipated heat.
+
+Live efficiency is a 200 ms inverter-DC-to-external-load ratio, shown only with
+at least 180 valid 1 kHz samples, positive input/output, no fault, ratio ≤1, and
+stored-energy rate below 5% of max(1 W, |input|). Otherwise it is unavailable.
+Stop work is separate and is not credited as useful output. Unmodeled iron and
+switching-energy losses are not populated. The live torque/speed trail uses
+gear-input torque (= output coupling torque / 6) and motor RPM. It is not a
+rated torque envelope. The optional 28-point dyno reuses `experiment-worker.js`
+with explicit independent default parameters and the existing motor-shaft
+qualification; it neither inherits nor controls the joint. No second solver
+starts until requested. Live and reference efficiency boundaries are labeled.
+
+`lab_pwm(phase_seconds,k)` reconstructs **one frozen-duty PWM period** using the
+native `Inverter` class in switched mode, with the live gate-enable latch and
+current duty. It never integrates current or changes the averaged live model.
+Fields 0–2 are three comparator requests, 3–8 AH/AL/BH/BL/CH/CL after native
+150 ns dead time, and 9 is the carrier. This is not Vgs, an oscilloscope capture,
+or live switching ripple. The 3PWM/6PWM selector changes which signals the
+interface diagram exposes, not motor phase count or plant fidelity. Both modes
+share the same three half bridges. See SimpleFOC driver configuration and current
+sensing references already linked in the reference guide. ADC senses current;
+DAC is not a power-current smoothing stage.
+
+Geometry now includes an illustrative 48 V source with distinct DC pair, U/V/W
+harness and encoder return. Phase leads pass a real notch in the fixed rear cap
+and the mount's annular bore. Sampled centerline-plus-radius clearance checks
+cover column, foot, bench, PCB, DC-source box and mount ring. These checks are
+not a complete CAD interference certification. Original dynamic mass, collider
+and hinge definitions are preserved; added supply/cables are zero-mass,
+non-contact decoration. No fabrication-ready circuit or vendor CAD is implied.
+
+`dashboard-smoke.cjs` verifies numerical histories, six gate nodes, read-only
+interface inspection, paused and continuously edited commands without viewport
+shift, native inline map, asset presence and responsive screen captures. All
+pre-existing native and browser acceptance suites remain enabled.

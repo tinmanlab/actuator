@@ -33,6 +33,19 @@ def ring(name,ri,ro,y0,y1,bevel=.0003,n=96):
             f.extend([(a,b,c),(a,c,d)])
     mesh_file(name,v,f)
 
+def notched_ring(name, ri, ro, y0, y1, n=96):
+    # A closed 320-degree annular segment: the rear lead exit is a real opening.
+    profile=[(ri,y0),(ro,y0),(ro,y1),(ri,y1)]
+    angles=[math.radians(-70+320*i/n) for i in range(n+1)]
+    vertices=[(r*math.cos(a),y,r*math.sin(a)) for r,y in profile for a in angles]
+    faces=[];stride=n+1
+    for j in range(4):
+        for i in range(n):
+            a=j*stride+i;b=a+1;c=((j+1)%4)*stride+i+1;d=c-1
+            faces.extend([(a,b,c),(a,c,d)])
+    for i in (0,n):faces.extend([(i,stride+i,2*stride+i),(i,2*stride+i,3*stride+i)])
+    mesh_file(name,vertices,faces)
+
 def coil(name):
     # Rectangular annulus in the Y/Z plane, extruded radially along X.
     loops=[]
@@ -53,6 +66,7 @@ def main():
     for name,rgba in [('shell','0.12 0.15 0.19 1'),('steel','0.42 0.48 0.54 1'),('silver','0.7 0.74 0.77 1'),('insulator','0.08 0.09 0.1 1'),('phase_u','0.85 0.25 0.13 1'),('phase_v','0.92 0.69 0.17 1'),('phase_w','0.13 0.38 0.72 1'),('magnet_n','0.3 0.34 0.4 1'),('magnet_s','0.4 0.44 0.49 1')]:
         ET.SubElement(asset,'material',name=name,rgba=rgba,specular='.6',shininess='.45')
     specs={
+      'mount_ring_mesh':(.055,.085,.072,.084),
       'motor_case_mesh':(.046,.053,0,.064),
       'gear_case_mesh':(.039,.053,-.050,0),
       'front_face_mesh':(.025,.053,-.059,-.050),
@@ -66,7 +80,7 @@ def main():
       'encoder_ring_mesh':(.004,.010,.060,.064),
     }
     for name,pars in specs.items():
-        ring(name,*pars)
+        (notched_ring if name=='rear_cap_mesh' else ring)(name,*pars)
         ET.SubElement(asset,'mesh',name=name,file=f'assets/{name}.obj')
     coil('winding_mesh');ET.SubElement(asset,'mesh',name='winding_mesh',file='assets/winding_mesh.obj')
     def geom(parent,name,kind='box',material='silver',**kw):
@@ -83,7 +97,7 @@ def main():
         geom(world,f'bench_foot_{i}','cylinder','dark',pos=[x,y,.0625],size=[.03,.0625])
     box(world,'mount_foot',[0,.10,.182],[.12,.075,.007],'steel')
     box(world,'mount_column',[0,.115,.373],[.045,.02,.190],'steel')
-    box(world,'motor_mount_plate',[0,.078,.6],[.069,.006,.069],'steel')
+    mesh(world,'motor_mount_plate','mount_ring_mesh',mat='steel')
     for i,(x,z) in enumerate([(-.057,.543),(.057,.543),(-.057,.657),(.057,.657)]):
         mesh(world,f'rear_mount_bolt_{i}','bolt_head_mesh',(x,.070,z),'dark')
     for name,shape,mat in [('motor_housing','motor_case_mesh','shell'),('gear_housing','gear_case_mesh','shell'),('front_face','front_face_mesh','silver'),('rear_cap','rear_cap_mesh','silver'),('front_bearing','front_bearing_mesh','steel'),('stator_stack','stator_stack_mesh','steel'),('encoder_ring','encoder_ring_mesh','pcb')]:
@@ -115,13 +129,27 @@ def main():
     box(world,'phase_connector',[.238,-.007,.204],[.005,.016,.004],'dark')
     box(world,'dc_connector',[.348,-.003,.204],[.004,.008,.004],'phase_v')
     box(world,'signal_connector',[.309,.063,.203],[.010,.003,.002],'dark')
+    # Separate phase, encoder and DC harnesses. The motor leads pass through
+    # the notched fixed rear cap and the mount's real central bore, not a plate.
+    box(world,'motor_terminal',[0,.061,.574],[.010,.004,.007],'insulator')
     for i,p in enumerate('uvw'):
         k=(i-1)*.005
-        path=[(.235,-.017+i*.009,.208),(.18,.024+k,.215),(.10,.09+k,.28),(.075,.096+k,.46),(.069,.046+k,.551),(.041,.032+k,.566)]
+        path=[(.238,-.015+i*.009,.212),(.20,.025+k,.22),(.145,.16+k,.25),
+              (.130,.16+k,.56),(.045,.130+k,.574),(k,.113,.574),(k,.061,.574)]
         for j,(a,b) in enumerate(zip(path,path[1:])):geom(world,f'phase_{p}_{j}','capsule',f'phase_{p}',fromto=[*a,*b],size=[.0019])
-    for j,(a,b) in enumerate(zip([(.31,.066,.205),(.18,.11,.21),(.04,.123,.4),(0,.083,.6)],[(.18,.11,.21),(.04,.123,.4),(0,.083,.6),(0,.073,.6)])):
-        geom(world,f'encoder_cable_{j}','capsule','insulator',fromto=[*a,*b],size=[.0021])
-    box(world,'cable_clip',[.075,.096,.46],[.008,.012,.004],'dark')
+    path=[(.310,.063,.209),(.20,.09,.22),(.18,.185,.23),(.135,.180,.40),(.115,.16,.63),(.005,.12,.60),(.005,.062,.60)]
+    for j,(a,b) in enumerate(zip(path,path[1:])):geom(world,f'encoder_cable_{j}','capsule','insulator',fromto=[*a,*b],size=[.0021])
+    # Clips wrap the bundle; they are supports, not electrical terminals.
+    for j,z in enumerate([.32,.48]):box(world,f'cable_clip_{j}',[.132,.16,z],[.006,.013,.004],'dark')
+    box(world,'dc_supply',[.35,.19,.229],[.095,.063,.038],'silver')
+    box(world,'supply_terminal',[.405,.121,.225],[.025,.008,.008],'pcb')
+    for i in range(10):box(world,f'supply_vent_{i}',[.285+i*.014,.19,.2672],[.003,.046,.0003],'dark')
+    for j,x in enumerate([.27,.43]):
+        for k,y in enumerate([.14,.24]):
+            geom(world,f'supply_foot_{j}_{k}','cylinder','insulator',pos=[x,y,.183],size=[.006,.008])
+    for label,k,mat in [('positive',-.004,'phase_u'),('return',.004,'insulator')]:
+        path=[(.35,-.003+k,.21),(.39,.003+k,.218),(.475,.055+k,.22),(.475,.105+k,.225),(.410+k,.120,.225)]
+        for j,(a,b) in enumerate(zip(path,path[1:])):geom(world,f'dc_{label}_{j}','capsule',mat,fromto=[*a,*b],size=[.002])
     # A bolted-down stop, rather than a floating orange box.
     stop_x=-.32*math.sin(.60)-.031-.028
     stopper=world.find("geom[@name='stopper']");stopper.set('pos',txt([stop_x,-.09,.36]));stopper.set('size',txt([.028,.045,.07]))

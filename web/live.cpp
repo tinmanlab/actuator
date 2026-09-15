@@ -19,8 +19,10 @@ struct Live {
  Command command{}, applied_command{}; Measurement measurement{}; int algorithm=0; std::uint64_t ticks=0;
  double load=0,pulse=0,pulse_until=0,applied_load=0,contact_reaction=0,peak=0;
  qdd::web::PeriodicStop stop;
+ std::array<double,16> power{};
  bool injected_fault=false,fatal=false;
  explicit Live(int a):drive(drive_config(a)),algorithm(a){
+  power[12]=plant.state.case_c;power[13]=plant.resistance();power[14]=plant.energy();
   command.mode=Mode::Impedance;command.position=.4f;
   sensors.capture(plant.state,bus.voltage,inverter.fet_c,0,period);
  }
@@ -34,6 +36,7 @@ struct Live {
   output=drive.tick(m,command);
   if(!trip.latched())inverter.begin_period(output.duty);
   double phase=0;bool captured=false;peak=0;
+  power.fill(0);const double energy0=plant.energy();
   while(phase<period-1e-14){
    // Preserve independent protection/PWM event boundaries and carrier-midpoint ADC.
    double h=std::min({5e-6,period-phase,inverter.next_event(phase)-phase,trip.next_event(t+phase)-(t+phase)});
@@ -42,12 +45,33 @@ struct Live {
    applied_load=load+((t+phase<pulse_until)?pulse:0);
    contact_reaction=stop.reaction(plant.state.output_angle,plant.state.output_speed);
    const auto before=plant.currents();
-   advance_bridge(plant,inverter,bus,phase+.5*h,applied_load+contact_reaction,h,trip.gate_allowed(output.gate_enable));
+   const auto previous=plant.state;
+   const double resistance=plant.resistance();
+   const auto io=advance_bridge(plant,inverter,bus,phase+.5*h,applied_load+contact_reaction,h,trip.gate_allowed(output.gate_enable));
+   const auto& mc=plant.config().mechanical;
+   const double wm=(previous.rotor_speed+plant.state.rotor_speed)/2;
+   const double wo=(previous.output_speed+plant.state.output_speed)/2;
+   const double x=((previous.rotor_angle+plant.state.rotor_angle)/mc.ratio-previous.output_angle-plant.state.output_angle)/2;
+   const double v=wm/mc.ratio-wo;
+   const double z=std::copysign(std::max(0.0,std::abs(x)-mc.backlash/2),x);
+   const double gearloss=std::max(0.0,(Plant::coupling_torque(mc,x,v)-mc.stiffness*z)*v);
+   const double friction=(mc.rotor_viscous*wm+mc.rotor_coulomb*std::tanh(wm/.1))*wm+
+      (mc.output_viscous*wo+mc.output_coulomb*std::tanh(wo/.01))*wo;
+   const auto i=io.power_current;
+   const double ac=io.voltage.a*i.a+io.voltage.b*i.b+io.voltage.c*i.c;
+   power[1]+=io.power_vbus*io.bus_current*h;power[2]+=ac*h;power[3]+=io.loss*h;
+   power[4]+=resistance*(i.a*i.a+i.b*i.b+i.c*i.c)*h;
+   power[5]+=friction*h;power[6]+=gearloss*h;
+   power[7]+=applied_load*wo*h;power[8]+=contact_reaction*wo*h;power[9]+=io.bus_current*h;
    sensors.analog_step_linear(before,plant.currents(),h);
    phase+=h;trip.observe(t+phase,plant.currents());peak=std::max(peak,peak_abs(plant.currents()));
    if(!captured&&phase>=period/2-1e-14){sensors.capture(plant.state,bus.voltage,inverter.fet_c,t+phase,period);captured=true;}
   }
-  ++ticks;
+  for(int k=1;k<=9;k++)power[k]/=period;
+  power[10]=(plant.energy()-energy0)/period;
+  power[11]=power[1]-power[3]-power[4]-power[5]-power[6]-power[7]-power[8]-power[10];
+  power[12]=plant.state.case_c;power[13]=plant.resistance();power[14]=plant.energy();power[15]=bus.brake_power;
+  ++ticks;power[0]=double(ticks)*period;
  }
 };
 std::unique_ptr<Live> live;
@@ -77,7 +101,7 @@ int lab_set(int k,double v){
 }
 int lab_step(int n){
  if(!live||live->fatal||n<0||n>10000)return 0;
- try{for(int i=0;i<n;++i)live->step();return n;}catch(...){live->fatal=true;return 0;}
+ try{std::array<double,12> sum{};for(int i=0;i<n;++i){live->step();for(int k=1;k<=11;k++)sum[k]+=live->power[k];}if(n)for(int k=1;k<=11;k++)live->power[k]=sum[k]/n;return n;}catch(...){live->fatal=true;return 0;}
 }
 double lab_get(int k){
  if(!live)return std::numeric_limits<double>::quiet_NaN();
@@ -118,4 +142,23 @@ double lab_signal(int k){
   case 27:return m.vbus;
   default:return std::numeric_limits<double>::quiet_NaN();
  }
+}
+
+// Diagnostics only. Power values are period means; residual retains integration/splitting error.
+double lab_power(int k){
+ if(!live||k<0||k>=16)return std::numeric_limits<double>::quiet_NaN();
+ return live->power[k];
+}
+// A frozen-duty reconstruction, NOT a switched integration of the live averaged plant.
+// 0..2: three PWM requests; 3..8: effective six gates with dead-time; 9: carrier.
+double lab_pwm(double phase,int k){
+ if(!live||!std::isfinite(phase)||phase<0||phase>=period||k<0||k>9)return std::numeric_limits<double>::quiet_NaN();
+ const double carrier=1-std::abs(2*phase/period-1);
+ const bool enabled=!live->fatal&&live->trip.gate_allowed(live->output.gate_enable);
+ if(k==9)return carrier;
+ const auto d=live->output.duty;
+ if(k<3)return enabled&&carrier<(k==0?d.a:k==1?d.b:d.c);
+ InverterConfig cfg=live->inverter.config();cfg.fidelity=Fidelity::Switched;Inverter inv(cfg);inv.begin_period(d);
+ const auto io=inv.evaluate(phase,live->plant.currents(),live->bus.voltage,enabled);
+ return (k%2)?io.legs[(k-3)/2].high:io.legs[(k-3)/2].low;
 }
