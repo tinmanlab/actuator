@@ -31,6 +31,12 @@ jobs:
           python -m pip install -r examples/mujoco/requirements.txt
           npm install --prefix web --ignore-scripts
           cd web && npx playwright install --with-deps chromium
+      - name: Parse browser entry points before expensive simulation
+        run: |
+          node --check web/worker.js
+          node --check web/dashboard.js
+          node --check web/dashboard-base.js
+          node --check web/electrical-path.js
       - name: Build and test the shared C++ core
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
