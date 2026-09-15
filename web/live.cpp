@@ -139,7 +139,7 @@ double lab_signal(int k){
   case 17:return l.sensors.filtered_current().a;case 18:return int(c.mode);
   case 19:return c.position;case 20:return c.velocity;case 21:return c.torque;case 22:return c.current.q;
   case 23:return c.kp;case 24:return c.kd;case 25:return l.algorithm;case 26:return o.reference.d;
-  case 27:return m.vbus;
+  case 27:return m.vbus;case 28:return l.plant.config().motor.pole_pairs*l.plant.state.rotor_angle;
   default:return std::numeric_limits<double>::quiet_NaN();
  }
 }
@@ -150,9 +150,9 @@ double lab_power(int k){
  return live->power[k];
 }
 // A frozen-duty reconstruction, NOT a switched integration of the live averaged plant.
-// 0..2: three PWM requests; 3..8: effective six gates with dead-time; 9: carrier.
+// 0..2: PWM requests; 3..8: effective six gates; 9: carrier; 10..12: leg poles; 13..15: phase-neutral V.
 double lab_pwm(double phase,int k){
- if(!live||!std::isfinite(phase)||phase<0||phase>=period||k<0||k>9)return std::numeric_limits<double>::quiet_NaN();
+ if(!live||!std::isfinite(phase)||phase<0||phase>=period||k<0||k>15)return std::numeric_limits<double>::quiet_NaN();
  const double carrier=1-std::abs(2*phase/period-1);
  const bool enabled=!live->fatal&&live->trip.gate_allowed(live->output.gate_enable);
  if(k==9)return carrier;
@@ -160,5 +160,7 @@ double lab_pwm(double phase,int k){
  if(k<3)return enabled&&carrier<(k==0?d.a:k==1?d.b:d.c);
  InverterConfig cfg=live->inverter.config();cfg.fidelity=Fidelity::Switched;Inverter inv(cfg);inv.begin_period(d);
  const auto io=inv.evaluate(phase,live->plant.currents(),live->bus.voltage,enabled);
- return (k%2)?io.legs[(k-3)/2].high:io.legs[(k-3)/2].low;
+ if(k<9)return (k%2)?io.legs[(k-3)/2].high:io.legs[(k-3)/2].low;
+ if(k<13)return io.legs[k-10].pole_voltage;
+ return k==13?io.voltage.a:k==14?io.voltage.b:io.voltage.c;
 }
