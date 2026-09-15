@@ -1,7 +1,7 @@
 name: Browser lab and Pages
 on:
   push:
-    branches: [main, feat/browser-lab, feat/contact-guides, feat/signals-and-fidelity, feat/interactive-powertrain, feat/home-live-pipeline, feat/visual-dashboard]
+    branches: [main, feat/browser-lab, feat/contact-guides, feat/signals-and-fidelity, feat/interactive-powertrain, feat/home-live-pipeline, feat/visual-dashboard, feat/synchronized-electrical-path]
   workflow_dispatch:
 permissions:
   contents: read
