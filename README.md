@@ -22,6 +22,8 @@
 
 A moving model does not explain a motor. This lab lets you follow **command → FOC → PWM → inverter → phase current → torque → motion**, then ask where the energy went.
 
+The first screen connects **Command → FOC → SVPWM / inverter → Output → Sensor feedback** to the same running joint. Select one stage for its live values; pause to inspect without changing the physics.
+
 Change a target, push the output, meet a stop or trip the driver. Inspect current and torque, open the motor housing, pause, advance 1 ms and export CSV. The browser compiles the existing **C++ controller, plant and protection to WebAssembly**; it is not a separate JavaScript approximation or a prerecorded pose animation.
 
 ## Start in 30 seconds

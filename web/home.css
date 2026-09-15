@@ -1,0 +1,27 @@
+/* Entry workspace only. Guides keep their existing layout. */
+.home [hidden]{display:none!important}
+.home .intro{padding:22px 0 12px}.home h1{font-size:clamp(26px,2.6vw,35px);margin:7px 0}
+.home .intro p{font-size:13px}.scope-label{font:10px var(--mono);color:var(--muted);font-weight:400}
+.pipeline-caption{display:flex;justify-content:space-between;gap:12px;font:11px/1.5 var(--mono);color:var(--muted);margin:0 0 8px}
+.pipeline-stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.pipeline-stages button{text-align:left;min-width:0;padding:10px 12px;background:#fff;border-radius:7px}
+.pipeline-stages button[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 3px var(--accent);background:#edf4ec}
+.stage-number{display:block;color:var(--accent);font:10px var(--mono)}
+.pipeline-stages b{display:block;font-size:13px;margin:3px 0 5px}
+.pipeline-stages output{display:block;font:16px/1.4 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pipeline-stages small{display:block;font:10px/1.5 var(--mono);color:var(--muted);min-height:15px;overflow-wrap:anywhere}
+.pipeline-detail{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 13px;margin:8px 0 12px;background:#eaf0e7;border-left:3px solid var(--accent);min-height:94px}
+.pipeline-detail h3{font-size:12px;margin:0 0 3px}.pipeline-detail p{font-size:12px;margin:0;color:#42574c;max-width:950px}
+.pipeline-detail output{display:block;font:11px/1.6 var(--mono);margin-top:4px;overflow-wrap:anywhere}
+.pipeline-actions{display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0}.pipeline-actions a{font-size:11px}.pipeline-actions button{font-size:11px}
+#pipeline-pending{font-size:11px;background:#fff0d6;margin:0 0 12px;padding:8px;border-radius:4px}
+.home .viewport{height:390px}.home .plots-grid{margin-top:14px}.home .signal-panel .explanation{margin:8px 0 14px}
+.home .signal-row{gap:12px;align-items:baseline}.home .signal-row strong{text-align:right;white-space:nowrap}
+#feedforward-flag{color:#976a21;font:10px var(--mono)}
+.route-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.route-grid article{border-top:2px solid #b6c6b0;padding:14px 0}.route-grid h3{font-size:16px;margin:8px 0}.route-grid p{font-size:12px;color:var(--muted);margin:8px 0}.route-grid a{font-size:12px}
+#recordings{padding:15px;background:#fff;border:1px solid var(--line);border-radius:7px}
+#recordings summary{font-size:14px}#recordings summary span{font-size:11px;color:var(--muted);font-weight:400;margin-left:12px}#recordings[open] .section-desc{margin:15px 0}
+@media(max-width:1000px){.pipeline-stages output{font-size:13px}.pipeline-stages button{padding:9px}.pipeline-stages b{font-size:11px}.home .viewport{height:390px}}
+@media(max-width:740px){.pipeline-caption{font-size:10px;flex-wrap:wrap;gap:4px}.pipeline-stages{gap:5px}.pipeline-stages button{padding:7px 5px}.pipeline-stages b{font-size:10px;min-height:30px}.pipeline-stages output{font-size:10px}.pipeline-stages small{display:none}.pipeline-detail{align-items:flex-start;min-height:0;padding:10px}.pipeline-actions a{display:none}.pipeline-actions button{font-size:10px;padding:6px}.pipeline-detail p{font-size:11px}.pipeline-detail output{font-size:10px}.home .lab-grid{display:flex;flex-direction:column}.home .controls{width:100%}.home .viewport{height:300px}.route-grid{grid-template-columns:1fr}.home nav a:last-child{display:block}.home .intro{padding:17px 0 12px}.home .plots-grid{grid-template-columns:1fr}}
+@media(max-width:420px){.pipeline-stages output{font-size:9px}.pipeline-stages b{font-size:9px}.stage-number{font-size:9px}.pipeline-actions{max-width:62px}.pipeline-actions button{white-space:normal}.home .plot-head{align-items:flex-start;gap:5px}.home .plot-head [role=group]{display:flex;flex-wrap:wrap}.home .chart-key{flex-wrap:wrap}.home .chart-key>span:last-child{margin-left:0}.home .viewport{height:275px}#recordings summary span{display:block;margin-left:17px}}

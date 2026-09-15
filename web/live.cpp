@@ -16,11 +16,11 @@ FastTripConfig protection_config(){FastTripConfig c;c.enabled=true;return c;}
 struct Live {
  Plant plant{}; Inverter inverter{}; DcLink bus{}; Sensors sensors{sensor_config()};
  Drive drive; FastTrip trip{protection_config(),period}; DriveOutput output{};
- Command command{}; std::uint64_t ticks=0;
+ Command command{}, applied_command{}; Measurement measurement{}; int algorithm=0; std::uint64_t ticks=0;
  double load=0,pulse=0,pulse_until=0,applied_load=0,contact_reaction=0,peak=0;
  qdd::web::PeriodicStop stop;
  bool injected_fault=false,fatal=false;
- explicit Live(int a):drive(drive_config(a)){
+ explicit Live(int a):drive(drive_config(a)),algorithm(a){
   command.mode=Mode::Impedance;command.position=.4f;
   sensors.capture(plant.state,bus.voltage,inverter.fet_c,0,period);
  }
@@ -30,6 +30,7 @@ struct Live {
   m.driver_fault=injected_fault||trip.latched();trip.supervisor_observed(t);
   command.calibrate=ticks==0;command.arm=drive.state()==State::Ready;
   command.enable=drive.state()==State::Ready||drive.state()==State::Armed||drive.state()==State::Fault;
+  measurement=m;applied_command=command;
   output=drive.tick(m,command);
   if(!trip.latched())inverter.begin_period(output.duty);
   double phase=0;bool captured=false;peak=0;
@@ -92,6 +93,29 @@ double lab_get(int k){
   case 24:return s.rotor_speed;case 25:return o.reference_limited;case 26:return l.fatal;
   case 27:return l.stop.lower();case 28:return l.stop.upper();case 29:return l.stop.enabled();
   case 30:return l.stop.penetration(s.output_angle);
+  default:return std::numeric_limits<double>::quiet_NaN();
+ }
+}
+
+// Read-only sidecar: keep the public 31-field scene/CSV ABI unchanged.
+// The plant is at snapshot time; held DriveOutput/Measurement are from the last tick.
+double lab_signal(int k){
+ if(!live)return std::numeric_limits<double>::quiet_NaN();
+ const auto& l=*live;const auto& o=l.output;const auto& m=l.measurement;const auto& c=l.applied_command;
+ const auto phase=l.plant.currents();
+ switch(k){
+  case 0:return double(l.ticks)*period;
+  case 1:return l.ticks?double(l.ticks-1)*period:-1;
+  case 2:return o.current.d;case 3:return o.current.q;
+  case 4:return o.voltage.d;case 5:return o.voltage.q;
+  case 6:return m.current_age;case 7:return m.encoder_age;
+  case 8:return m.currents.a;case 9:return m.currents.b;case 10:return m.currents.c;
+  case 11:return phase.a;case 12:return phase.b;case 13:return phase.c;
+  case 14:return o.current_limit;case 15:return m.output_angle;case 16:return m.output_speed;
+  case 17:return l.sensors.filtered_current().a;case 18:return int(c.mode);
+  case 19:return c.position;case 20:return c.velocity;case 21:return c.torque;case 22:return c.current.q;
+  case 23:return c.kp;case 24:return c.kd;case 25:return l.algorithm;case 26:return o.reference.d;
+  case 27:return m.vbus;
   default:return std::numeric_limits<double>::quiet_NaN();
  }
 }

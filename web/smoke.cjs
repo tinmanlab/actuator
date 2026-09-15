@@ -70,6 +70,7 @@ const fs=require('fs');
   await page.waitForFunction(t=>labState.snapshot[0]>t+.1,rejectedAt);
   ok(await page.evaluate(()=>labState.snapshot[29]===0&&labState.snapshot[12]===0&&!document.getElementById('contact').checked&&document.getElementById('error').hidden),'occupied-stop insertion is rejected without stopping the engine');
   await page.click('#run');
+  await page.locator('#recordings').evaluate(e=>e.open=true);
   for(const id of ['tracking','disturbance','contact','impact','fault']){
    mark('video '+id);const video=page.locator('#film-'+id+' video');await video.scrollIntoViewIfNeeded();
    media[id]=await video.evaluate(v=>({mp4:v.canPlayType('video/mp4; codecs="avc1.64001f"'),vp9:v.canPlayType('video/webm; codecs="vp9"')}));

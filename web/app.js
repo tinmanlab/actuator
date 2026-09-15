@@ -1,9 +1,11 @@
+import {createLivePipeline} from './home-pipeline.js';
 import * as THREE from './vendor/three.module.js';
 import {OrbitControls} from './vendor/OrbitControls.js';
-const $=id=>document.getElementById(id), ui={ready:false,running:false,scenario:'tracking',rows:[],snapshot:null,modelLoaded:false,errors:[]};
+const $=id=>document.getElementById(id), ui={ready:false,running:false,scenario:'tracking',rows:[],snapshot:null,signal:null,modelLoaded:false,errors:[]};
 window.labState=ui;
 const states=['Disabled','Calibrating','Ready','Armed','Fault'];
 const worker=new Worker('worker.js');let chart='position',renderer,camera,orbit,world,rotor,output,closed=false;
+const pipeline=createLivePipeline(setChart);
 const originalMaterials=new Map(),stopParts=[],proxyParts=[];const axes=new THREE.Vector3(0,1,0);
 function report(message){ui.errors.push(message);$('error').hidden=false;$('error').textContent=message+' Reload the page to retry. For file:// use the hosted site or a local HTTP server.';$('engine-status').textContent='Engine unavailable';$('engine-status').className='status fault';}
 worker.onerror=e=>report(e.message||'Worker failed to load');
@@ -11,7 +13,7 @@ function send(d){if(ui.ready)worker.postMessage(d);}
 function values(){return {mode:+$('mode').value,position:+$('target').value,kp:+$('kp').value,kd:+$('kd').value,load:+$('load').value,velocity:+$('velocity').value,torque:+$('torque').value,current:+$('current').value};}
 function setRunning(v){if(!ui.ready)return;worker.postMessage({type:'run',value:v});ui.running=v;$('run').textContent=v?'Pause simulation':'Start simulation';$('step').disabled=v;}
 function reset(start=false){
- if(!ui.ready)return;ui.rows=[];ui.snapshot=null;$('notice').hidden=true;setRunning(false);
+ if(!ui.ready)return;ui.rows=[];ui.snapshot=null;ui.signal=null;$('notice').hidden=true;setRunning(false);
  worker.postMessage({type:'reset',scenario:ui.scenario,algorithm:+$('algorithm').value,values:values()});
  worker.postMessage({type:'set',key:5,value:$('contact').checked?1:0});
  if(start)setRunning(true);
@@ -19,15 +21,27 @@ function reset(start=false){
 function choose(name){
  ui.scenario=name;$('mode').value=name==='reverse'?'2':'4';$('target').value=name==='contact'?'.85':'.4';$('load').value='0';$('kp').value='30';$('kd').value='1.8';for(const id of ['velocity','torque','current'])$(id).value='0';$('contact').checked=['contact','reverse'].includes(name);if(name==='reverse')$('velocity').value='-3';
  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.case===name));
- refreshInputs();reset(true);$('simulator').scrollIntoView({block:'start',behavior:'smooth'});
+ refreshInputs();setChart(modeChart());reset(true);$('simulator').scrollIntoView({block:'start',behavior:'smooth'});
 }
+function modeChart(){const m=+$('mode').value;return m===0?'current':m===1?'torque':m===2?'speed':'position';}
+function setChart(name){chart=name;document.querySelectorAll('[data-chart]').forEach(x=>x.classList.toggle('selected',x.dataset.chart===name));drawChart();}
 function refreshInputs(){
+ const mode=+$('mode').value;
+ $('position-command').hidden=mode<3;$('target').disabled=mode<3;
+ $('impedance-gains').hidden=mode!==4;for(const id of ['kp','kd'])$(id).disabled=mode!==4;
+ for(const [id,primary,used] of [['velocity',mode===2,mode>=2],['torque',mode===1,mode>=1],['current',mode===0,mode===0]]){
+  const label=$(id+'-command'),parent=$(primary?'primary-command':'feedforward-inputs');
+  if(label.parentElement!==parent)parent.append(label);label.hidden=!used;$(id).disabled=!used;
+ }
+ $('velocity-label').textContent=mode===2?'Output speed command [rad/s]':'Velocity feed-forward [rad/s]';
+ $('torque-label').textContent=mode===1?'Output torque command [N·m]':'Torque feed-forward [N·m]';
+ $('feedforward-flag').textContent=((mode>=3&&+$('velocity').value!==0)||(mode>=2&&+$('torque').value!==0))?'(nonzero)':'';
  const q=+$('target').value;$('target-val').textContent=`${q.toFixed(2)} rad / ${Math.round(q*180/Math.PI)}°`;$('load-val').textContent=`${(+$('load').value).toFixed(1)} N·m`;
  stopParts.forEach(p=>p.visible=$('contact').checked);
 }
 for(const [id,key] of [['mode',0],['target',1],['velocity',2],['torque',3],['load',4],['current',8],['kp',9],['kd',10]]){
  $(id).addEventListener(id==='target'||id==='load'?'input':'change',()=>{
-  const e=$(id);if(!e.checkValidity()){e.reportValidity();return;}refreshInputs();send({type:'set',key,value:+e.value});
+  const e=$(id);if(!e.checkValidity()){e.reportValidity();return;}refreshInputs();send({type:'set',key,value:+e.value});if(id==='mode')setChart(modeChart());if(ui.snapshot)pipeline.update(ui.snapshot,ui.signal,values());
  });
 }
 $('run').onclick=()=>setRunning(!ui.running);$('reset').onclick=()=>reset();$('step').onclick=()=>send({type:'step'});
@@ -35,8 +49,7 @@ $('push').onclick=()=>send({type:'set',key:7,value:4});$('fault').onclick=()=>se
 $('contact').onchange=()=>{refreshInputs();send({type:'set',key:5,value:$('contact').checked?1:0});};
 $('algorithm').onchange=()=>reset();$('speed').onchange=()=>send({type:'rate',value:+$('speed').value});
 for(const b of document.querySelectorAll('[data-case]'))b.onclick=()=>choose(b.dataset.case);
-for(const b of document.querySelectorAll('[data-lesson]'))b.onclick=()=>choose(b.dataset.lesson);
-for(const b of document.querySelectorAll('[data-chart]'))b.onclick=()=>{chart=b.dataset.chart;document.querySelectorAll('[data-chart]').forEach(x=>x.classList.toggle('selected',x===b));drawChart();};
+for(const b of document.querySelectorAll('[data-chart]'))b.onclick=()=>setChart(b.dataset.chart);
 const telemetry=['time_s','output_angle_rad','output_speed_rad_s','id_A','iq_A','iq_reference_A','gear_torque_Nm','bus_V','rotor_angle_rad','winding_C','fet_C','state','fault','gates_on','duty_a','duty_b','duty_c','interval_peak_phase_current_A','target_angle_rad','external_load_Nm','stop_reaction_Nm','torque_reference_Nm','voltage_saturated','break_latched','rotor_speed_rad_s','current_reference_limited','fatal','stop_lower_limit_rad','stop_upper_limit_rad','stop_enabled','stop_penetration_rad'];
 $('export').onclick=()=>{
  const csv=telemetry.join(',')+'\n'+ui.rows.map(r=>r.join(',')).join('\n');
@@ -53,46 +66,46 @@ worker.onmessage=({data:d})=>{
  if(d.type==='running'){ui.running=d.value;if(ui.snapshot)update(ui.snapshot);return;}
  if(d.type==='reset')ui.rows=[];
  const rows=d.rows||(d.row?[d.row]:[]);
- if(rows.length){ui.rows.push(...rows);if(ui.rows.length>8000)ui.rows.splice(0,ui.rows.length-8000);ui.snapshot=rows.at(-1);if(performance.now()-lastUi>25||d.type==='reset'){update(ui.snapshot);lastUi=performance.now();}}
+ if(rows.length){ui.rows.push(...rows);if(ui.rows.length>8000)ui.rows.splice(0,ui.rows.length-8000);ui.snapshot=rows.at(-1);ui.signal=d.signal;if(performance.now()-lastUi>25||d.type==='reset'||!ui.running){update(ui.snapshot);lastUi=performance.now();}}
 };
 function update(r){
  if(r.length>=31){$('contact').checked=!!r[29];refreshInputs();$('stop-limits').textContent=r[29]?`Free arc ${r[27].toFixed(3)} to ${r[28].toFixed(3)} rad · deflection ${(r[30]*1000).toFixed(2)} mrad`:'Stop disabled · no obstacle contact';}
- const n=(id,x,d=2,unit='')=>$(id).innerHTML=`${x.toFixed(d)} <small>${unit}</small>`;
- $('time').textContent=r[0].toFixed(3)+' s';n('q',r[1],3,'rad');n('tau',r[6],2,'N·m');n('iq',r[4],2,'A');n('bus',r[7],1,'V');
- $('angle-error').textContent=`error ${(r[18]-r[1]>=0?'+':'')+(r[18]-r[1]).toFixed(3)} rad`;
- $('contact-force').textContent=`stop reaction ${r[20].toFixed(2)} N·m`;$('current-ref').textContent=`target ${r[5].toFixed(2)} A`;
- $('gate').textContent=`gates ${r[13]?'ON':'OFF'} · ${states[r[11]]||'unknown'}`;$('drive-state').textContent=states[r[11]]||'Unknown';
+ $('time').textContent=r[0].toFixed(3)+' s';
+ pipeline.update(r,ui.signal,values());
+ $('load-reaction').textContent=`${r[19].toFixed(2)} / ${r[20].toFixed(2)} N·m`;
  $('temperature').textContent=`${r[9].toFixed(1)} / ${r[10].toFixed(1)} °C`;$('saturation').textContent=r[22]?'Limited by bus voltage':'No';
- for(let i=0;i<3;i++){const e=$('duty-'+i);e.style.width=(r[14+i]*100)+'%';$('duty-value-'+i).textContent=(r[14+i]*100).toFixed(0)+'%';}
  $('engine-status').textContent=r[12]?`Fault latched · code ${r[12]}`:ui.running?'Running · C++ WebAssembly':'Paused · C++ WebAssembly';
  $('engine-status').className='status'+(r[12]?' fault':ui.running?' running':'');
- let title='Following the target',text='The angle error sets output torque. FOC regulates q-axis current; the gearbox turns the output link.';
+ const activeMode=ui.signal?.[18]??4;
+ let title=['Regulating motor current','Applying output torque','Regulating output speed','Holding position','Following with spring and damping'][activeMode];
+ let text=['Current mode bypasses the outer torque loop. Position is not regulated.','Torque mode commands gearbox-side torque, not output position.','Speed error produces a torque request. Position is not regulated.','Position error feeds a speed loop, then torque and current control.','Impedance yields under load. The target is not a rigid position constraint.'][activeMode];
  if(r[12]){title='Gates off. Physics continues.';text='The driver fault is latched. Current decays and the load may still move. Reset starts a NEW virtual experiment; it does not acknowledge a real drive.';}
  else if(Math.abs(r[20])>.1){title=r[20]<0?'Reverse contact: opposite face':'Contact: front face';text='The finite stop acts in both directions and on every turn. Signed reaction is a load subtracted from output torque. Small deflection is compliant contact, not free passage.';}
  else if(Math.abs(r[19])>.05){title='A load is pushing on the output';text=`Applied load: ${r[19].toFixed(1)} N·m. In impedance mode, static error is approximately load / Kp. Try Position mode to compare.`;}
  else if(ui.scenario==='disturbance'&&r[0]<.7){title='A disturbance is coming at 0.7 s';text='Watch angle, current, and torque together. A 4 N·m load pulse will last 120 simulated milliseconds. Use Push to repeat it.';}
  else if(ui.scenario==='fault'&&r[0]<.7){title='Driver trip scheduled at 0.7 s';text='A fault will disable the gates. Watch what happens to current and the moving output after electrical drive is removed.';}
- if(!ui.running&&r[0]<.001){title='Start here';text='Press Start, then move the target slider. Add a load to see an impedance controller yield. Nothing is connected to physical hardware.';}
+ if(!ui.running&&r[0]<.001){title='Start here';text='Start or step the joint, then follow stages 01–05. The same frozen snapshot stays available while paused.';}
  $('explanation').innerHTML=`<strong>${title}</strong><p>${text}</p>`;
  if(rotor)rotor.quaternion.copy(rotor.userData.base).multiply(new THREE.Quaternion().setFromAxisAngle(axes,r[8]));
  if(output)output.quaternion.copy(output.userData.base).multiply(new THREE.Quaternion().setFromAxisAngle(axes,r[1]));
  drawChart();
 }
-$('duties').innerHTML=['A','B','C'].map((x,i)=>`<div class="duty"><span>${x}</span><div class="duty-track"><div class="duty-bar" id="duty-${i}"></div></div><output id="duty-value-${i}">50%</output></div>`).join('');
 function drawChart(){
  const c=$('plot'),rect=c.getBoundingClientRect(),dpr=Math.min(devicePixelRatio,2),w=rect.width,h=rect.height;
  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);}
  const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
- const ix=chart==='position'?[1,18,'rad']:chart==='current'?[4,5,'A']:[6,21,'N·m'];
+ const ix=chart==='position'?[1,18,'rad']:chart==='current'?[4,5,'A']:chart==='speed'?[2,2,'rad/s']:[6,21,'N·m'];
+ const mode=ui.signal?.[18]??+$('mode').value,hasReference=chart==='current'||(chart==='position'&&mode>=3)||(chart==='torque'&&mode!==0);
+ $('reference-label').hidden=!hasReference;
  $('chart-unit').textContent=`${ix[2]} · latest 4 simulated seconds`;
  let r=ui.rows;const end=r.length?r.at(-1)[0]:4,start=Math.max(0,end-4);r=r.filter(x=>x[0]>=start);
- let lo=0,hi=chart==='current'?1:.5;for(const x of r){lo=Math.min(lo,x[ix[0]],x[ix[1]]);hi=Math.max(hi,x[ix[0]],x[ix[1]]);}
+ let lo=0,hi=chart==='current'?1:.5;for(const x of r){lo=Math.min(lo,x[ix[0]],hasReference?x[ix[1]]:x[ix[0]]);hi=Math.max(hi,x[ix[0]],hasReference?x[ix[1]]:x[ix[0]]);}
  const pad=Math.max(.1,(hi-lo)*.12);lo-=pad;hi+=pad;const left=45,right=w-12,top=7,bottom=h-24;
  const x=t=>left+(t-start)/(Math.max(4,end-start))*(right-left),y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top);
  ctx.font='10px ui-monospace,monospace';ctx.textAlign='right';
  for(let i=0;i<5;i++){const v=lo+(hi-lo)*i/4,Y=y(v);ctx.strokeStyle='#e1e7de';ctx.beginPath();ctx.moveTo(left,Y);ctx.lineTo(right,Y);ctx.stroke();ctx.fillStyle='#75836f';ctx.fillText(v.toFixed(2),left-7,Y+3);}
  ctx.textAlign='center';for(let i=0;i<=4;i++){const t=start+i;ctx.fillStyle='#75836f';ctx.fillText(t.toFixed(1)+' s',x(t),h-5);}
- for(let s=1;s>=0;s--){ctx.beginPath();ctx.strokeStyle=s?'#b17b32':'#21745d';ctx.lineWidth=s?1.4:1.9;ctx.setLineDash(s?[5,3]:[]);const stride=Math.max(1,Math.floor(r.length/(w*2)));let first=true;for(let i=0;i<r.length;i+=stride){const px=x(r[i][0]),py=y(r[i][ix[s]]);if(first){ctx.moveTo(px,py);first=false;}else ctx.lineTo(px,py);}ctx.stroke();}ctx.setLineDash([]);
+ for(let s=hasReference?1:0;s>=0;s--){ctx.beginPath();ctx.strokeStyle=s?'#b17b32':'#21745d';ctx.lineWidth=s?1.4:1.9;ctx.setLineDash(s?[5,3]:[]);const stride=Math.max(1,Math.floor(r.length/(w*2)));let first=true;for(let i=0;i<r.length;i+=stride){const px=x(r[i][0]),py=y(r[i][ix[s]]);if(first){ctx.moveTo(px,py);first=false;}else ctx.lineTo(px,py);}ctx.stroke();}ctx.setLineDash([]);
 }
 const nums=(s,def=[])=>s?s.split(/\s+/).map(Number):def;
 async function setupScene(){
@@ -163,6 +176,6 @@ for (const film of document.querySelectorAll('.film')) {
 fetch('build.json').then(r=>r.json()).then(b=>{$('version').textContent=`Source ${b.source_commit.slice(0,12)} · local C++/WASM · 1 kHz telemetry`;$('version').dataset.sha=b.source_commit;}).catch(()=>{$('version').textContent='Build metadata unavailable';});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&ui.running)setRunning(false);});
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&!['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();setRunning(!ui.running);}});
-// Zero feed-forward defaults are also visible in the form before the engine starts.
-for(const id of ['velocity','torque','current'])$(id).value='0';
+function openRecordingsFromHash(){if(location.hash==='#videos'||location.hash.startsWith('#film-'))$('recordings').open=true;}
+window.addEventListener('hashchange',openRecordingsFromHash);openRecordingsFromHash();
 refreshInputs();drawChart();

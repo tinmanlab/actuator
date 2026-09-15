@@ -34,7 +34,7 @@ python -m http.server 8765 --directory _site
 # Another terminal:
 cd web && npx playwright install chromium
 LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs
-node signals-smoke.cjs && node powertrain-smoke.cjs
+node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs
 ```
 
 `tools/build_site.py` reuses the reviewed MJCF/OBJ recipe, exporting a compact scene representation for Three.js. Visual meshes never become a second source of mechanical mass. Camera controls and cutaway visibility do not change physics. No vendor CAD fidelity is implied.
@@ -90,3 +90,57 @@ replaces the README still image. A loop restart replays an event, not reverse ph
 The Pages job additionally runs `web/powertrain-smoke.cjs` before deployment and
 against the public URL. It checks autostart, recomputation, stale-result labeling,
 torque/efficiency qualification, temperature changes, event loops and the GIF.
+
+
+## First-screen live pipeline
+
+The entry page is a single live joint, not a dashboard of independent solvers.
+Five ordered, keyboard-operable stage buttons share one explanation region.
+Selecting a stage is read-only; it only selects an existing result chart.
+There is one scenario picker, one command editor per field and one result chart.
+Inactive inputs are hidden; applicable feed-forward controls remain available
+under Advanced, with a nonzero indicator. HTML and runtime command defaults are now consistently zero for velocity and
+torque feed-forward. The previous HTML said 2 rad/s and 1 N·m, but the existing
+startup JavaScript already overwrote them with zero. This corrects an inconsistent
+initial representation and removes duplicate initialization; it does not claim
+the previously deployed automatic-start trajectory was biased.
+
+Independent switching/heat/maps, saved native traces and recorded MuJoCo examples
+are explicitly separated below the live bench. Recordings are collapsed on entry;
+`#videos` opens them. No iframe or second engine is started on the entry page.
+
+`lab_signal(int field)` is an additive **read-only** browser adapter accessor.
+The existing 11-command, 31-field `lab_get` ABI and CSV are unchanged. The Worker
+sends a latest `signal` sidecar with the same timestamp as the last scene row in
+each packet. These are latest-state diagnostics, not a second 1 kHz history.
+The UI rejects mismatched timestamps rather than combining different runs.
+Before any control tick, field 1 is -1. Before initialization or for an invalid
+field, the accessor returns NaN. Reads never advance time, RNG, filtering or control.
+
+| Signal index | Meaning |
+|---|---|
+| 0 / 1 | Plant endpoint time / most recent controller tick time, seconds |
+| 2 / 3 | Offset-corrected, sample-angle-aligned Id / Iq used by the last controller tick, A |
+| 4 / 5 | Limited Vd / Vq commands from that tick, V |
+| 6 / 7 | Current / encoder age at that tick, seconds (not age at UI rendering) |
+| 8–10 | Raw, held ADC ia / ib / ic delivered to that tick, A |
+| 11–13 | True phase ia / ib / ic at the plant endpoint, A |
+| 14 | Controller current limit, A |
+| 15 / 16 | Measured output angle / speed at the controller tick, rad / rad/s |
+| 17 | Analog-filtered ia at plant endpoint, A |
+| 18–24 | Command captured at the last tick: mode, position, velocity, torque, Iq, Kp, Kd (same units as `lab_set`) |
+| 25 / 26 / 27 | Algorithm selector (0 PI, 1 predictive) / Id reference A / measured DC bus V |
+
+The plant endpoint is 50 μs after the displayed controller tick. Held ADC samples
+are older again; the UI labels those times separately. A command edited while
+paused is pending, not retroactively applied to the displayed tick. Only Armed
+state is described as active current regulation; gate-off does not imply zero
+physical current. No logical gate waveform is invented for the averaged bridge.
+The speed chart is plant speed only; position/torque references are hidden when
+not applicable to the selected control mode.
+
+`home-smoke.cjs` verifies default tracking, same-run timestamp binding, read-only
+stage selection, pending commands, mode-specific inputs, fault/reset behavior,
+collapsed media and responsive layouts on the built site and public Pages URL.
+`live_readonly_signal_contract` verifies observational purity and unchanged native
+trajectories; `homepage_pipeline_contract` guards ordering and zero feed-forward.
