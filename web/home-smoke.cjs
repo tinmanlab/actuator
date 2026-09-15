@@ -13,7 +13,7 @@ const fs=require('fs');
  page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&!r.url().endsWith('favicon.ico'))requests.push(r.status()+' '+r.url());});
  try{
   stage='entry';await page.goto(base,{waitUntil:'networkidle'});
-  await page.waitForFunction(()=>window.labState?.modelLoaded&&labState.running&&labState.signal?.length===28&&labState.snapshot?.[0]>.8,null,{timeout:60000});
+  await page.waitForFunction(()=>window.labState?.modelLoaded&&labState.running&&labState.signal?.length===29&&labState.snapshot?.[0]>.8,null,{timeout:60000});
   ok(await page.evaluate(()=>Math.abs(labState.snapshot[1]-.4)<.025),'entry follows .4 rad without hidden feed-forward bias');
   ok(await page.evaluate(()=>labState.snapshot[0]===labState.signal[0]),'scene and controller sidecar share a snapshot time');
   ok(await page.locator('[data-live-stage]').count()===5,'one five-stage live pipeline');
