@@ -41,7 +41,6 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
   const pausedPhase=Number(await page.locator('#pwm-phase').inputValue());await page.waitForTimeout(250);
   ok(Math.abs(Number(await page.locator('#pwm-phase').inputValue())-pausedPhase)<.001,'PWM replay pause freezes the inspection cursor');
   ok(await page.locator('#gate-scope').getAttribute('data-cursor-us')!==null,'PWM scope exposes the selected-time cursor');
-  await page.click('#run');
   const frozen=await page.evaluate(()=>JSON.stringify(labState.snapshot));
   await page.selectOption('#pwm-interface','3');await page.locator('#pwm-phase').evaluate(e=>{e.value='7.5';e.dispatchEvent(new Event('input',{bubbles:true}));});
   ok((await page.locator('#pwm-owner').textContent()).startsWith('3PWM requests'),'3PWM explains driver-owned complementary gates');
