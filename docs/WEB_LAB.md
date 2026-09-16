@@ -34,14 +34,17 @@ python -m http.server 8765 --directory _site
 # Another terminal:
 cd web && npx playwright install chromium
 LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs
-node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs && node dashboard-smoke.cjs
+node signals-smoke.cjs
+node powertrain-smoke.cjs
+node home-smoke.cjs
+node dashboard-smoke.cjs
 ```
 
 `tools/build_site.py` reuses the reviewed MJCF/OBJ recipe, exporting a compact scene representation for Three.js. Visual meshes never become a second source of mechanical mass. Camera controls and cutaway visibility do not change physics. No vendor CAD fidelity is implied.
 
 ## Verification and publication
 
-`.github/workflows/pages.yml` builds and tests the native facade, compiles WASM, runs the actual MuJoCo acceptance suite, creates public videos, and drives the real browser with Playwright. It checks target changes, pause/step/reset, pulse load, contact reaction, fault latch, algorithm selection, CSV export, model inspection, all five video decoders, and narrow-screen overflow. A failed check prevents deployment.
+`.github/workflows/pages.yml` builds and tests the native facade, compiles WASM, runs the actual MuJoCo acceptance suite, creates public videos, and drives the real browser with Playwright. It checks target changes, pause/step/reset, pulse load, contact reaction, fault latch, algorithm selection, CSV export, model inspection, all five video decoders, synchronized electrical-path inspection, and narrow-screen overflow. Browser scripts run as independent fail-fast commands; publication also requires every retained browser, signal, powertrain, home, and dashboard acceptance JSON to exist and report `accepted: true`. A missing or false report blocks deployment.
 
 Only `main` publishes to the `github-pages` environment. The test artifact includes screenshots, browser results, native results, generated assets and `build.json`. The deployed footer identifies source commit. Film metadata and SHA-256 hashes are in `media/evidence.json`. Generated media is a Pages build product, not an expiring API-only artifact link in the README.
 
@@ -112,9 +115,9 @@ are explicitly separated below the live bench. Recordings are collapsed on entry
 
 `lab_signal(int field)` is an additive **read-only** browser adapter accessor.
 The existing 11-command, 31-field `lab_get` ABI and CSV are unchanged. The Worker
-sends a latest `signal` sidecar with the same timestamp as the last scene row in
-each packet. Aligned histories for the instrument scopes use the same sidecar
-values; no separate simulation state is created.
+sends a latest 29-field `signal` sidecar with the same timestamp as the last scene
+row in each packet. Aligned histories for the instrument scopes use the same
+sidecar values; no separate simulation state is created.
 The UI rejects mismatched timestamps rather than combining different runs.
 Before any control tick, field 1 is -1. Before initialization or for an invalid
 field, the accessor returns NaN. Reads never advance time, RNG, filtering or control.
@@ -132,6 +135,12 @@ field, the accessor returns NaN. Reads never advance time, RNG, filtering or con
 | 17 | Analog-filtered ia at plant endpoint, A |
 | 18–24 | Command captured at the last tick: mode, position, velocity, torque, Iq, Kp, Kd (same units as `lab_set`) |
 | 25 / 26 / 27 | Algorithm selector (0 PI, 1 predictive) / Id reference A / measured DC bus V |
+| 28 | Electrical **actuation angle** used by native SVPWM for that tick, rad: measured rotor angle predicted by encoder age plus half a PWM period to the actuation midpoint, multiplied by pole pairs |
+
+Field 28 is deliberately not the plant-endpoint rotor electrical angle. Together
+with fields 4/5 and 27 it reconstructs the same native SVPWM duty ratios exposed
+by scene fields 14–16. This binds the teaching overlay's inverse-Park vector to
+the controller actuation sample rather than mixing endpoint and control-tick time.
 
 The plant endpoint is 50 μs after the displayed controller tick. Held ADC samples
 are older again; the UI labels those times separately. A command edited while
@@ -145,18 +154,29 @@ not applicable to the selected control mode.
 `home-smoke.cjs` verifies default tracking, same-run timestamp binding, read-only
 stage selection, pending commands, mode-specific inputs, fault/reset behavior,
 collapsed media and responsive layouts on the built site and public Pages URL.
-`live_readonly_signal_contract` verifies observational purity and unchanged native
-trajectories; `homepage_pipeline_contract` guards ordering and zero feed-forward.
+`live_readonly_signal_contract` verifies observational purity, the actuation-angle
+to native-duty binding, and unchanged native trajectories; `homepage_pipeline_contract`
+guards ordering and zero feed-forward.
 
 ## Instrument dashboard (same-run observations, no raster concept overlay)
 
 The main HTML uses a scoped dark instrument layout: phase/dq/duty histories,
 3D hardware, PWM logic reconstruction, analog/ADC feedback, live temperature,
-losses and an optional inline reference dyno. `dashboard.js` only plots native
-observations. The existing 31-field CSV and 28-field signal API remain unchanged;
-the Worker additionally sends their aligned 1 kHz sidecar histories, bounded to
-8,000 rows. Rendering is capped near 10 Hz; the solver still uses its original
-integration and control rates. Plotting or inspecting never advances the plant.
+losses and an optional inline reference dyno. `dashboard-base.js` plots native
+observations and `electrical-path.js` adds a read-only synchronized teaching layer.
+The existing 31-field scene/CSV ABI remains unchanged; the additive signal sidecar
+has 29 fields and aligned 1 kHz histories are bounded to 8,000 rows. Rendering is
+capped near 10 Hz; the solver still uses its original integration and control rates.
+Plotting or inspecting never advances the plant.
+
+The synchronized teaching layer reads one coherent chain from the same native
+sample: limited Vd/Vq plus field-28 actuation angle → inverse-Park αβ vector →
+SVPWM sector and duties → command ownership → six-switch bridge → reconstructed
+phase-neutral voltage → current sensing and ADC feedback. The 3PWM view shows
+three MCU PWM requests and driver-owned complementary/dead-time generation; the
+6PWM view exposes AH/AL/BH/BL/CH/CL as six vertically separated lanes. Both modes
+retain the same physical three-phase, six-switch bridge. Gate and phase-voltage
+micro-scopes share one selected 50 μs reconstruction cursor.
 
 The pending-command problem was a flow-level paragraph repeatedly toggled by a
 comparison between edited inputs and the previous tick's command. A reserved,
@@ -192,13 +212,16 @@ starts until requested. Live and reference efficiency boundaries are labeled.
 `lab_pwm(phase_seconds,k)` reconstructs **one frozen-duty PWM period** using the
 native `Inverter` class in switched mode, with the live gate-enable latch and
 current duty. It never integrates current or changes the averaged live model.
-Fields 0–2 are three comparator requests, 3–8 AH/AL/BH/BL/CH/CL after native
-150 ns dead time, and 9 is the carrier. This is not Vgs, an oscilloscope capture,
-or live switching ripple. The 3PWM/6PWM selector changes which signals the
-interface diagram exposes, not motor phase count or plant fidelity. Both modes
-share the same three half bridges. See SimpleFOC driver configuration and current
-sensing references already linked in the reference guide. ADC senses current;
-DAC is not a power-current smoothing stage.
+Fields 0–2 are three comparator requests; 3–8 are AH/AL/BH/BL/CH/CL after native
+150 ns dead time; 9 is the carrier; 10–12 are A/B/C leg pole voltages; and 13–15
+are reconstructed Va/Vb/Vc phase-neutral voltages. The phase-neutral triple is
+checked for zero-sum KVL consistency. This is not Vgs, an oscilloscope capture,
+or live switching ripple: the micro inspector freezes the live duty and phase
+current for one native inverter reconstruction. The 3PWM/6PWM selector changes
+which command-ownership signals the interface exposes, not motor phase count or
+plant fidelity. Both modes share the same three half bridges. See SimpleFOC driver
+configuration and current sensing references already linked in the reference guide.
+ADC senses current; DAC is not a power-current smoothing stage.
 
 Geometry now includes an illustrative 48 V source with distinct DC pair, U/V/W
 harness and encoder return. Phase leads pass a real notch in the fixed rear cap
@@ -208,7 +231,10 @@ not a complete CAD interference certification. Original dynamic mass, collider
 and hinge definitions are preserved; added supply/cables are zero-mass,
 non-contact decoration. No fabrication-ready circuit or vendor CAD is implied.
 
-`dashboard-smoke.cjs` verifies numerical histories, six gate nodes, read-only
-interface inspection, paused and continuously edited commands without viewport
-shift, native inline map, asset presence and responsive screen captures. All
-pre-existing native and browser acceptance suites remain enabled.
+`dashboard-smoke.cjs` verifies numerical histories, six gate nodes, one active
+SVPWM sector, native phase-neutral reconstruction, KVL consistency, explicit
+3PWM/6PWM command ownership, six separated gate lanes, a shared gate/voltage
+cursor, read-only interface inspection, paused and continuously edited commands
+without viewport shift, native inline map, asset presence and responsive screen
+captures at 1640/1440/768/390 px. All pre-existing native and browser acceptance
+suites remain enabled.
