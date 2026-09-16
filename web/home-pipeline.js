@@ -23,7 +23,7 @@ export function createLivePipeline(selectChart){
  buttons.forEach((b,i)=>{b.onclick=()=>choose(b.dataset.liveStage);b.onkeydown=e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();choose(keys[(i+(e.key==='ArrowRight'?1:4))%5],true);}};});
  $('pipeline-next').onclick=()=>choose(keys[(keys.indexOf(selected)+1)%5]);
  function draw(r,s,requested){
-  if(!s||s.length!==28||r[0]!==s[0]){$('pipeline-time').textContent='Waiting for a matching controller snapshot';$('live-pipeline').dataset.synchronized='false';return;}
+  if(!s||s.length!==29||r[0]!==s[0]){$('pipeline-time').textContent='Waiting for a matching controller snapshot';$('live-pipeline').dataset.synchronized='false';return;}
   latest=[r,s,requested];$('live-pipeline').dataset.synchronized='true';$('live-pipeline').dataset.time=String(r[0]);
   const hasTick=s[1]>=0,active=r[11]===3,mode=s[18];
   const target=mode===0?[s[22],'A']:mode===1?[s[21],'N·m']:mode===2?[s[20],'rad/s']:[s[19],'rad'];
