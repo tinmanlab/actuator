@@ -47,7 +47,7 @@ const {chromium}=require('@playwright/test');const fs=require('fs');
   ok(await page.locator('#gate-scope-rich').getAttribute('data-cursor-us')!==null,'PWM scope exposes the selected-time cursor');
   const frozen=await page.evaluate(()=>JSON.stringify(labState.snapshot));
   await page.selectOption('#pwm-interface','3');await page.locator('#pwm-phase').evaluate(e=>{e.value='7.5';e.dispatchEvent(new Event('input',{bubbles:true}));});
-  ok((await page.locator('#pwm-owner').textContent()).startsWith('3PWM:'),'3PWM explains driver-owned complementary gates');
+  ok((await page.locator('#pwm-owner').textContent()).startsWith('3PWM requests A/B/C'),'3PWM explains driver-owned complementary gates');
   ok(await page.locator('#pwm-command-source').getAttribute('data-mode')==='3'&&await page.locator('.command-chips.three').isVisible()&&!await page.locator('.command-chips.six').isVisible(),'3PWM visibly shows three MCU duty requests and driver-owned complements');
   ok((await page.locator('#ownership-driver-role').textContent()).includes('complementary'),'3PWM assigns complement and dead-time ownership to the driver path');
   await page.selectOption('#pwm-interface','6');await page.waitForTimeout(80);
