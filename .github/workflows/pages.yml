@@ -37,6 +37,9 @@ jobs:
           node --check web/dashboard.js
           node --check web/dashboard-base.js
           node --check web/electrical-path.js
+          node --check web/home-pipeline.js
+          node --check web/home-smoke.cjs
+          node --check web/dashboard-smoke.cjs
       - name: Build and test the shared C++ core
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -54,8 +57,14 @@ jobs:
       - name: Test real browser controls, WebAssembly, viewer, and videos
         run: |
           python -m http.server 8765 --directory _site > /tmp/site-server.log 2>&1 &
-          cd web && LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs && node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs && node dashboard-smoke.cjs
+          cd web
+          LAB_URL="http://127.0.0.1:8765/?paused=1" node smoke.cjs
+          node signals-smoke.cjs
+          node powertrain-smoke.cjs
+          node home-smoke.cjs
+          node dashboard-smoke.cjs
           cd ..
+          node -e "const fs=require('fs'),root='results/browser',names=['browser-acceptance.json','signals-acceptance.json','powertrain-acceptance.json','home-acceptance.json','dashboard-acceptance.json']; for(const n of names){const p=root+'/'+n;if(!fs.existsSync(p))throw Error('missing '+p);const d=JSON.parse(fs.readFileSync(p,'utf8'));if(d.accepted!==true)throw Error(n+' not accepted (stage '+(d.stage||'n/a')+')');}"
           cp results/browser/browser-lab.png _site/media/browser-lab.png
           cp results/browser/browser-acceptance.json _site/browser-acceptance.json
       - name: Retain the built site and exact-head browser evidence
@@ -110,7 +119,15 @@ jobs:
           LAB_URL: ${{ needs.deploy.outputs.page_url }}
           EXPECTED_SHA: ${{ github.sha }}
           LAB_EVIDENCE: ../results/public-browser
-        run: cd web && LAB_URL="${LAB_URL}?paused=1" node smoke.cjs && node signals-smoke.cjs && node powertrain-smoke.cjs && node home-smoke.cjs && node dashboard-smoke.cjs
+        run: |
+          cd web
+          LAB_URL="${LAB_URL}?paused=1" node smoke.cjs
+          node signals-smoke.cjs
+          node powertrain-smoke.cjs
+          node home-smoke.cjs
+          node dashboard-smoke.cjs
+          cd ..
+          node -e "const fs=require('fs'),root='results/public-browser',names=['browser-acceptance.json','signals-acceptance.json','powertrain-acceptance.json','home-acceptance.json','dashboard-acceptance.json']; for(const n of names){const p=root+'/'+n;if(!fs.existsSync(p))throw Error('missing '+p);const d=JSON.parse(fs.readFileSync(p,'utf8'));if(d.accepted!==true)throw Error(n+' not accepted (stage '+(d.stage||'n/a')+')');}"
       - name: Preserve deployed-site evidence
         if: always()
         uses: actions/upload-artifact@v4
