@@ -139,7 +139,8 @@ double lab_signal(int k){
   case 17:return l.sensors.filtered_current().a;case 18:return int(c.mode);
   case 19:return c.position;case 20:return c.velocity;case 21:return c.torque;case 22:return c.current.q;
   case 23:return c.kp;case 24:return c.kd;case 25:return l.algorithm;case 26:return o.reference.d;
-  case 27:return m.vbus;case 28:return l.plant.config().motor.pole_pairs*l.plant.state.rotor_angle;
+  case 27:return m.vbus;
+  case 28:{const double p=l.plant.config().motor.pole_pairs;return p*(m.rotor_angle+m.rotor_speed*(m.encoder_age+0.5*period));}
   default:return std::numeric_limits<double>::quiet_NaN();
  }
 }
