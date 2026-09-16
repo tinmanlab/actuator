@@ -1,4 +1,5 @@
 #include "../web/live.h"
+#include "qdd/control.hpp"
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -18,7 +19,9 @@ int main(){try{
  check(std::abs(lab_signal(11)+lab_signal(12)+lab_signal(13))<1e-6,"phase currents violate KCL");
  check(std::abs(lab_signal(3)-lab_get(5))<.03,"FOC measured current mismatch");
  check(lab_signal(6)>=0&&lab_signal(6)<.001,"sensor age contract");
- check(std::abs(lab_signal(28)-7*lab_get(8))<1e-10,"electrical angle diagnostic mismatch");
+ const auto mod=qdd::svpwm({float(lab_signal(4)),float(lab_signal(5))},float(lab_signal(28)),float(lab_signal(27)));
+ check(mod.valid,"electrical actuation angle cannot reconstruct SVPWM");
+ check(std::abs(mod.duty.a-lab_get(14))<1e-6&&std::abs(mod.duty.b-lab_get(15))<1e-6&&std::abs(mod.duty.c-lab_get(16))<1e-6,"electrical actuation angle is not bound to displayed duty");
  double old=lab_signal(19);lab_set(1,.8);check(lab_signal(19)==old,"pending command mislabeled as applied");
  lab_step(1);check(std::abs(lab_signal(19)-.8)<1e-6,"next tick fails to report applied target");
  lab_set(6,1);lab_step(100);check(lab_get(12)==9&&lab_get(13)==0,"fault disabled gate");
