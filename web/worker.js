@@ -3,7 +3,7 @@ importScripts('wasm/qdd.js');
 let core, running=false, timer=null, scenario='tracking', fired=false, rate=1;
 const fields=31;
 function row(){return Array.from({length:fields},(_,i)=>core._lab_get(i));}
-function signal(){return Array.from({length:28},(_,i)=>core._lab_signal(i));}
+function signal(){return Array.from({length:29},(_,i)=>core._lab_signal(i));}
 function power(){return Array.from({length:16},(_,i)=>core._lab_power(i));}
 function wave(){
  const points=new Set(Array.from({length:101},(_,k)=>Math.min(49.999,k*.5)*1e-6));
@@ -11,7 +11,7 @@ function wave(){
   const d=core._lab_get(k),a=d*25e-6,b=50e-6-a;
   for(const t of [a,a+150e-9,b,b+150e-9])for(const dx of [-1e-10,0,1e-10])if(t+dx>=0&&t+dx<50e-6)points.add(t+dx);
  }
- return {time:core._lab_get(0),rows:[...points].sort((a,b)=>a-b).map(t=>[t,...Array.from({length:10},(_,k)=>core._lab_pwm(t,k))])};
+ return {time:core._lab_get(0),rows:[...points].sort((a,b)=>a-b).map(t=>[t,...Array.from({length:16},(_,k)=>core._lab_pwm(t,k))])};
 }
 function set(k,v){if(!core._lab_set(k,v))throw Error(`Rejected control ${k}: ${v}`);}
 function reset(data={}){
