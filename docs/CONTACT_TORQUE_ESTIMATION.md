@@ -33,14 +33,13 @@ known and the scalar normal Jacobian is non-singular.
 For the simple hinge fixture the experiment fits the lumped model
 
 \[
-\tau_a =
 I\ddot q
 + g_s\sin q
 + g_c\cos q
 + b\dot q
 + f_c\,\mathrm{sign}(\dot q)
 + \tau_0
-+ \tau_\mathrm{ext}.
+= \tau_a + \tau_\mathrm{ext}.
 \]
 
 The contact-free excitation lane estimates
