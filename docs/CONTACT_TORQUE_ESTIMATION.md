@@ -116,7 +116,11 @@ It reported 8.7 N swing RMS error for the continuous-time derivation implemented
 discretely versus 4.1 N for the fully discrete observer in that simulation.
 Its later 99.3% / 4--5 ms contact-detection result belongs to the complete
 Cheetah 3 fusion of force, foot-height and gait-phase priors; those numbers are
-not acceptance thresholds for this one-link experiment.
+not acceptance thresholds for this one-link experiment. The experiment therefore
+reports a separate MIT-style **dynamic no-contact** comparison between the fully
+discrete observer and a forward-Euler implementation of the classical observer.
+A green binary contact detector does not count as reproduction of the paper's
+discretization advantage unless that dynamic comparison also improves.
 
 Reference:
 - G. Bledt, P. M. Wensing, S. Ingersoll, S. Kim,
@@ -129,15 +133,22 @@ Reference:
 The initial implementation stays dependency-light, but these are useful
 whole-body comparators rather than code to copy blindly:
 
-- \`mlisi1/haptiquad\`: Pinocchio/Eigen momentum residual and external-force
+- `mlisi1/haptiquad`: Pinocchio/Eigen momentum residual and external-force
   estimation for floating-base robots.
-- \`isri-aist/mc_external_forces_observer\`: \`mc_rtc\` observer with
+- `isri-aist/mc_external_forces_observer`: `mc_rtc` observer with
   force-sensor and generalized-momentum modes, and explicit torque-source
   choices.
-- \`ShahramKhorshidi/system_identification\`: physically consistent inertial
+- `ShahramKhorshidi/system_identification`: physically consistent inertial
   identification with contact-nullspace projection, LMI/SDP and NLS variants.
+- `well-robotics/PRIME` (RSS 2026): contact-implicit full-information
+  estimation that jointly refines motion, frictional contact forces and
+  physically consistent inertial parameters. It includes Unitree G1/Go2
+  experiments and is the strongest current open-source comparator for the later
+  contact-rich identification/reconstruction stage. It is a batch optimization
+  method, not a drop-in 1 kHz contact observer, so it does not replace the
+  momentum-residual baseline in this lane.
 
-A newer algorithmic comparator is Zhou et al.,
+A newer online-estimation comparator is Zhou et al.,
 *Simultaneous Collision Detection and Force Estimation for Dynamic Quadrupedal
 Locomotion*, ICRA 2025, which uses an interacting multiple-model Kalman filter
 to estimate both contact modes and external force from encoders/dynamics. It is
@@ -148,41 +159,41 @@ the residual baseline is characterized.
 
 Build the existing native co-simulation library and generated MuJoCo model:
 
-\`\`\`bash
+```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 python -m pip install -r examples/mujoco/requirements.txt
-\`\`\`
+```
 
 Run only this research lane:
 
-\`\`\`bash
+```bash
 python examples/mujoco/contact_estimation.py \\
   --output results/contact_estimation
-\`\`\`
+```
 
 The output includes:
 
-- \`summary.json\`: identified parameters, independent inertia truth, free-space
+- `summary.json`: identified parameters, independent inertia truth, free-space
   residual RMS, observer/contact torque RMSE and correlation, contact
   precision/recall/delay, and the force-observability boundary.
-- \`contact_trace.csv\`: actual-engine contact truth alongside the discrete
+- `contact_trace.csv`: actual-engine contact truth alongside the discrete
   momentum observer, classical observer and finite-difference residual.
 
 The full MuJoCo verification tool also gates this lane:
 
-\`\`\`bash
+```bash
 python tools/verify_mujoco.py --backend osmesa \\
   --output results/mujoco_acceptance
-\`\`\`
+```
 
-## Mapping to \`tinmanlab/figure\`
+## Mapping to `tinmanlab/figure`
 
-The current \`figure\` headless integration exposes \`JointTorqueModel\` at the
+The current `figure` headless integration exposes `JointTorqueModel` at the
 plant boundary:
 
-- \`applied(dof, commanded, qd)\` changes the torque actually applied.
-- \`measured(dof, applied, qd)\` changes the torque reported to the estimator.
+- `applied(dof, commanded, qd)` changes the torque actually applied.
+- `measured(dof, applied, qd)` changes the torque reported to the estimator.
 
 The actuator research lane should be used to decide what that hook represents
 before adding a contact detector. In particular, commanded torque, motor-current
@@ -197,7 +208,7 @@ A defensible transfer sequence is:
 3. port the discrete momentum residual to a multi-DoF rigid-body model;
 4. map residual to foot wrench using the foot Jacobian under explicit contact
    assumptions;
-5. compare against \`figure\`'s MuJoCo foot-wrench truth;
+5. compare against `figure`'s MuJoCo foot-wrench truth;
 6. only then add contact probability/fusion if the force channel alone is
    insufficient.
 
