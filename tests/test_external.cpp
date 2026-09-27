@@ -14,6 +14,7 @@ int main(int argc,char** argv) {
   for(int n=0;n<2000;n++)CHECK(qdd_external_tick(h.p,&i,&o)==0);
   CHECK(o.state==3);CHECK(o.fault==0);CHECK(o.gate_enabled);CHECK(std::abs(o.iq-4)<.05);
   CHECK(std::abs(o.time_s-.1)<1e-12);CHECK(o.rotor_torque>.4);
+  CHECK(qdd_external_measured_motor_torque(h.p)>.4);CHECK(qdd_external_measured_motor_torque(h.p)<.55);
  };
  tests["external_gear_reaction_is_reciprocal"]=[]{
   Handle h;QddExternalInput i{};i.rotor_angle=.06;i.mode=0;QddExternalOutput o{};
