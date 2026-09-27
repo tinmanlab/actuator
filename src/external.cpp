@@ -16,10 +16,11 @@ BenchConfig config(int switched,int predictive) {
 }
 class External {
  BenchConfig c_;Plant plant_;Inverter inverter_;DcLink bus_;Sensors sensors_;Drive drive_;FastTrip trip_;
- std::uint64_t ticks_=0;bool fatal_=false;
+ std::uint64_t ticks_=0;bool fatal_=false;double measured_motor_torque_=0;
 public:
  External(int switched,int predictive):c_(config(switched,predictive)),plant_(c_.plant),inverter_(c_.inverter),bus_(c_.bus),sensors_(c_.sensor),drive_(c_.drive),trip_(c_.protection,period) {}
  void fail() noexcept {fatal_=true;}
+ double measured_motor_torque() const noexcept {return measured_motor_torque_;}
  int tick(const QddExternalInput& in,QddExternalOutput& result) {
   result={};
   if(fatal_)return -1;
@@ -44,6 +45,7 @@ public:
   cmd.position=float(in.position_ref);cmd.velocity=float(in.velocity_ref);cmd.torque=float(in.torque_ref);
   cmd.current.q=float(in.iq_ref);cmd.kp=float(in.kp);cmd.kd=float(in.kd);
   const auto out=drive_.tick(measurement,cmd);
+  measured_motor_torque_=double(c_.plant.motor.torque_per_iq(out.current.d))*double(out.current.q);
   if(!trip_.latched())inverter_.begin_period(out.duty);
   double phase=0,rotor_impulse=0,output_impulse=0,peak=0;bool captured=false;
   while(phase<period-1e-14) {
@@ -83,3 +85,4 @@ int qdd_external_tick(void* h,const QddExternalInput* in,QddExternalOutput* out)
 }
 void qdd_external_destroy(void* h){delete static_cast<External*>(h);}
 double qdd_external_period(void){return period;}
+double qdd_external_measured_motor_torque(void* h){return h?static_cast<External*>(h)->measured_motor_torque():0.0;}

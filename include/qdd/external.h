@@ -26,6 +26,8 @@ QDD_EXPORT void* qdd_external_create(int32_t switched,int32_t predictive);
 QDD_EXPORT int qdd_external_tick(void*,const QddExternalInput*,QddExternalOutput*);
 QDD_EXPORT void qdd_external_destroy(void*);
 QDD_EXPORT double qdd_external_period(void);
+/* Backward-compatible diagnostic accessor: torque reconstructed from the same delayed/noisy current sample consumed by FOC, before transmission dynamics. */
+QDD_EXPORT double qdd_external_measured_motor_torque(void*);
 #ifdef __cplusplus
 }
 #endif

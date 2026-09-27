@@ -39,8 +39,15 @@ def main():
                 df=abs(b['max_intended_contact_force_N']-c['max_intended_contact_force_N'])/max(1.,c['max_intended_contact_force_N'])
                 result.update(final_angle_difference_rad=dq,penetration_difference_m=dp,relative_peak_force_difference=df,accepted=dq<=.01 and dp<=.001 and df<=.20)
             refinement.append(result)
+    contact_out=a.output/'torque_contact_estimation'
+    contact_cmd=[sys.executable,str(ROOT/'examples/mujoco/contact_estimation.py'),'--output',str(contact_out)]
+    if a.library:contact_cmd+=['--library',str(a.library.resolve())]
+    contact_run=subprocess.run(contact_cmd,capture_output=True,text=True)
+    (a.output/'torque_contact_estimation.log').write_text(contact_run.stdout+'\\n'+contact_run.stderr)
+    contact_summary=json.loads((contact_out/'summary.json').read_text()) if (contact_out/'summary.json').exists() else dict(accepted=False,status='EXECUTION_FAILED')
+    report['contact_estimation']=dict(exit_code=contact_run.returncode,summary=contact_summary)
     report.update(status='EXECUTED',refinement=refinement,
-        accepted=report['analytical_fixture']['accepted'] and all(x['exit_code']==0 and x['summary'].get('accepted') for x in report['cases']) and all(x['accepted'] for x in refinement),
+        accepted=report['analytical_fixture']['accepted'] and all(x['exit_code']==0 and x['summary'].get('accepted') for x in report['cases']) and all(x['accepted'] for x in refinement) and contact_run.returncode==0 and contact_summary.get('accepted') is True,
         claim_boundary='Substep refinement holds electrical coupling at 50 us; not coupling-rate convergence, calibration, HIL or hardware acceptance.')
     dest.write_text(json.dumps(report,indent=2,allow_nan=False)+'\n');print(json.dumps(report,indent=2))
     return 0 if report['accepted'] else 4

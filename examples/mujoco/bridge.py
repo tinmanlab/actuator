@@ -32,6 +32,8 @@ class Drive:
         self.lib.qdd_external_tick.restype=C.c_int
         self.lib.qdd_external_destroy.argtypes=[C.c_void_p];self.lib.qdd_external_destroy.restype=None
         self.lib.qdd_external_period.restype=C.c_double
+        self.lib.qdd_external_measured_motor_torque.argtypes=[C.c_void_p]
+        self.lib.qdd_external_measured_motor_torque.restype=C.c_double
         self.period=self.lib.qdd_external_period()
         self.handle=self.lib.qdd_external_create(int(switched),int(predictive))
         if not self.handle:raise RuntimeError('Invalid configuration or native allocation failure')
@@ -41,6 +43,10 @@ class Drive:
         if self.lib.qdd_external_tick(self.handle,C.byref(inp),C.byref(out))!=0:
             raise RuntimeError('Native co-simulation input rejected; context remains inhibited')
         return out
+    @property
+    def measured_motor_torque(self) -> float:
+        if not self.handle:raise RuntimeError('Drive is closed')
+        return float(self.lib.qdd_external_measured_motor_torque(self.handle))
     def close(self):
         if self.handle:self.lib.qdd_external_destroy(self.handle);self.handle=None
     def __enter__(self):return self
