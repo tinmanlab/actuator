@@ -53,8 +53,8 @@ def _solve_square(a: list[list[float]], b: list[float]) -> list[float]:
 class ScalarLinkModel:
     """Lumped 1-DoF rigid-link model.
 
-    tau_drive = I*qdd + gs*sin(q) + gc*cos(q)
-                + b*qd + fc*sign(qd) + bias + tau_ext
+    I*qdd + gs*sin(q) + gc*cos(q)
+          + b*qd + fc*sign(qd) + bias = tau_drive + tau_ext
 
     The sign convention matches MuJoCo's generalized force at the output hinge.
     """
@@ -269,7 +269,10 @@ def _run_actual_engine(output: Path, library: Path | None, cutoff_hz: float, sam
         model = mujoco.MjModel.from_xml_path(str(xml))
         data = mujoco.MjData(model)
         rq, rd, oq, od, output_body = ids(model)
-        set_active(model, ("stopper", "stop_foot", "stop_column"), contact)
+        # Only the original physical stopper participates in collision. The
+        # generated foot/column are zero-mass visual supports and remain
+        # non-colliding exactly as in the repository's standard contact lane.
+        set_active(model, ("stopper",), contact)
         set_active(model, ("ball",), False)
         ball_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "impact_ball")
         if ball_body >= 0:
