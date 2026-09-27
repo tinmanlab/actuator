@@ -191,6 +191,15 @@ def _rms(values: list[float]) -> float:
     return math.sqrt(sum(v * v for v in values) / max(1, len(values)))
 
 
+def _abs_quantile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    if not 0.0 <= q <= 1.0:
+        raise ValueError("quantile must lie in [0,1]")
+    ordered = sorted(abs(v) for v in values)
+    return ordered[round(q * (len(ordered) - 1))]
+
+
 def _correlation(a: list[float], b: list[float]) -> float:
     if len(a) != len(b) or len(a) < 2:
         return 0.0
@@ -209,6 +218,7 @@ def _detection_metrics(truth: list[bool], predicted: list[bool], dt: float) -> d
     tn = sum((not t) and (not p) for t, p in zip(truth, predicted))
     precision = tp / max(1, tp + fp)
     recall = tp / max(1, tp + fn)
+    specificity = tn / max(1, tn + fp)
     accuracy = (tp + tn) / max(1, len(truth))
     try:
         t0 = truth.index(True)
@@ -218,6 +228,7 @@ def _detection_metrics(truth: list[bool], predicted: list[bool], dt: float) -> d
         delay_ms = None
     return dict(
         tp=tp, fp=fp, fn=fn, tn=tn, precision=precision, recall=recall,
+        specificity=specificity, false_positive_rate=1.0 - specificity,
         accuracy=accuracy, first_contact_delay_ms=delay_ms
     )
 
@@ -352,11 +363,28 @@ def _run_actual_engine(output: Path, library: Path | None, cutoff_hz: float, sam
     model = fit_scalar_link(fit_rows)
     _, _, contact_trace = run_lane(True, 2.0)
 
-    # Evaluate the identified model on the free-space lane.
+    # Evaluate the identified model and both momentum-observer discretizations
+    # on the same high-dynamic no-contact lane.  Bledt et al.'s key numerical
+    # claim is specifically about suppressing fictitious swing-phase residuals,
+    # not merely about steady contact tracking.
     free_errors = [
         direct_inverse_dynamics(model, r["q"], r["qd"], r["qdd_truth"], r["tau"])
         for r in free_trace if r["t"] > 0.28
     ]
+    free_discrete = DiscreteMomentumObserver(model.inertia, cutoff_hz, dt)
+    free_classical = EulerMomentumObserver(model.inertia, cutoff_hz, dt)
+    free_discrete_est = []
+    free_classical_est = []
+    for r in free_trace:
+        h = model.internal_torque(r["q"], r["qd"])
+        de = free_discrete.update(r["qd"], r["tau"], h)
+        ce = free_classical.update(r["qd"], r["tau"], h)
+        if r["t"] > 0.28:
+            free_discrete_est.append(de)
+            free_classical_est.append(ce)
+    free_discrete_rms = _rms(free_discrete_est)
+    free_classical_rms = _rms(free_classical_est)
+    free_ratio = free_discrete_rms / max(1e-12, free_classical_rms)
 
     discrete = DiscreteMomentumObserver(model.inertia, cutoff_hz, dt)
     classical = EulerMomentumObserver(model.inertia, cutoff_hz, dt)
@@ -390,10 +418,12 @@ def _run_actual_engine(output: Path, library: Path | None, cutoff_hz: float, sam
             force_est.append(abs(scalar_force_from_torque(de, jn)))
             force_truth.append(abs(fn))
 
-    # Estimate a contact threshold from the no-contact residual instead of
-    # tuning it on the contact lane.
+    # Estimate a contact threshold from the *observer's* own no-contact
+    # distribution, not inverse-dynamics truth and never the contact lane.
+    # A high quantile makes false positives visible rather than hiding them
+    # behind the class imbalance of the sustained-contact fixture.
     noise_rms = _rms(free_errors)
-    threshold = max(0.08, 5.0 * noise_rms)
+    threshold = max(0.08, 1.25 * _abs_quantile(free_discrete_est, 0.995))
     predicted_contact = [abs(x) >= threshold for x in estimates]
     detection = _detection_metrics(contact_truth, predicted_contact, dt)
 
@@ -431,6 +461,12 @@ def _run_actual_engine(output: Path, library: Path | None, cutoff_hz: float, sam
         truth_output_inertia_kg_m2=inertia_truth,
         inertia_relative_error=inertia_rel,
         free_space_residual_rms_Nm=noise_rms,
+        free_space_discrete_observer_rms_Nm=free_discrete_rms,
+        free_space_classical_observer_rms_Nm=free_classical_rms,
+        discrete_to_classical_free_rms_ratio=free_ratio,
+        mit_style_dynamic_comparison=(
+            "PASS" if free_discrete_rms < free_classical_rms else "NOT_REPRODUCED"
+        ),
         contact_torque_rmse_Nm=contact_rmse,
         classical_observer_contact_rmse_Nm=classical_rmse,
         finite_difference_contact_rmse_Nm=direct_rmse,
@@ -443,7 +479,9 @@ def _run_actual_engine(output: Path, library: Path | None, cutoff_hz: float, sam
             "Primary observable is generalized external joint torque. Scalar normal force is "
             "reported only when the intended contact point/direction gives a non-singular "
             "normal Jacobian; this is not a general 3-D wrench estimator. The lane reproduces "
-            "the MIT force-estimation channel, not its gait/height/contact-probability fusion."
+            "the MIT force-estimation channel, not its gait/height/contact-probability fusion. "
+            "The MIT-style dynamic comparison is reported separately and must not be inferred "
+            "from the binary contact detector's aggregate accuracy."
         ),
         identification_boundary=(
             "The first lane identifies a lumped one-DoF rigid-link model from contact-free "
